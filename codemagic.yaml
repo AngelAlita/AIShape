@@ -1,0 +1,67 @@
+# codemagic.yaml
+
+workflows:
+  react-native-android:
+    name: React Native Android
+    max_build_duration: 60
+    instance_type: mac_mini_m1
+    environment:
+      groups:
+        # 添加密钥环境变量组(如果有)
+        # - credentials
+      vars:
+        PACKAGE_NAME: "com.shu.aishape" # 替换为你的包名
+      node: latest
+    cache:
+      cache_paths:
+        - ~/.npm
+        - ~/Library/Caches/CocoaPods
+        - ~/Library/Developer/Xcode/DerivedData
+    scripts:
+      - name: Install npm dependencies
+        script: |
+          npm install
+      - name: Set Android SDK location
+        script: |
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/android/local.properties"
+      - name: Build Android release
+        script: |
+          cd android
+          chmod +x gradlew
+          ./gradlew bundleRelease
+    artifacts:
+      - android/app/build/outputs/**/*.aab
+      - android/app/build/outputs/**/*.apk
+
+  react-native-ios:
+    name: React Native iOS
+    max_build_duration: 60
+    instance_type: mac_mini_m1
+    environment:
+      groups:
+        # 添加密钥环境变量组(如果有)
+        # - credentials
+      vars:
+        BUNDLE_ID: "com.shu.aishape" # 替换为你的Bundle ID
+      node: latest
+      xcode: latest
+      cocoapods: default
+    scripts:
+      - name: Install npm dependencies
+        script: |
+          npm install
+      - name: Install CocoaPods dependencies
+        script: |
+          cd ios && pod install
+      - name: Set Info.plist values
+        script: |
+          APP_VERSION=$(npm -s run env echo '$npm_package_version')
+          BUILD_NUMBER=$(($(date +%s)/60))
+          echo "Setting app version to $APP_VERSION and build number to $BUILD_NUMBER"
+      - name: Build iOS
+        script: |
+          cd ios
+          xcodebuild -workspace AIShape.xcworkspace -scheme AIShape -configuration Release -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 14' build
+    artifacts:
+      - ios/build/AIShape.ipa
+      - $HOME/Library/Developer/Xcode/DerivedData/*/Build/**/*.dSYM
