@@ -1,74 +1,343 @@
-import { Image, StyleSheet, Platform } from 'react-native';
-
-import { HelloWave } from '@/components/HelloWave';
-import ParallaxScrollView from '@/components/ParallaxScrollView';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
+import { ScrollView, StyleSheet, View, Text, TouchableOpacity } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function HomeScreen() {
+  const insets = useSafeAreaInsets();
+  const currentDate = "2024年2月6日";
+  const userName = "小明";
+  
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12'
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-        <ThemedText>
-          Tap the Explore tab to learn more about what's included in this starter app.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          When you're ready, run{' '}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+    <View style={styles.container}>
+      <LinearGradient
+        colors={['#2A86FF', '#3F99FF']}
+        style={styles.headerGradient}>
+        <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
+          <View>
+            <Text style={styles.greeting}>Hi, {userName}</Text>
+            <Text style={styles.date}>{currentDate}</Text>
+          </View>
+          <TouchableOpacity style={styles.profileButton}>
+            <Ionicons name="person-circle-outline" size={40} color="white" />
+          </TouchableOpacity>
+        </View>
+      </LinearGradient>
+      
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}>
+        
+        {/* 进度概览 */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>今日概览</Text>
+          <View style={styles.progressGrid}>
+            <View style={styles.progressItem}>
+              <FontAwesome5 name="walking" size={24} color="#2A86FF" />
+              <Text style={styles.progressValue}>8,246</Text>
+              <Text style={styles.progressLabel}>步数</Text>
+            </View>
+            <View style={styles.progressItem}>
+              <FontAwesome5 name="fire" size={24} color="#FF6B6B" />
+              <Text style={styles.progressValue}>486</Text>
+              <Text style={styles.progressLabel}>千卡</Text>
+            </View>
+            <View style={styles.progressItem}>
+              <Ionicons name="time-outline" size={24} color="#FFD166" />
+              <Text style={styles.progressValue}>45</Text>
+              <Text style={styles.progressLabel}>分钟</Text>
+            </View>
+          </View>
+          <View style={styles.progressBarContainer}>
+            <View style={styles.progressBarBackground}>
+              <View style={[styles.progressBar, { width: '70%' }]} />
+            </View>
+            <Text style={styles.progressBarText}>70% 健康目标已完成</Text>
+          </View>
+        </View>
+        
+        {/* 功能快捷按钮 */}
+        <View style={styles.quickAccessContainer}>
+          <TouchableOpacity style={styles.quickAccessButton}>
+            <View style={[styles.quickAccessIconContainer, { backgroundColor: '#2A86FF' }]}>
+              <FontAwesome5 name="dumbbell" size={20} color="white" />
+            </View>
+            <Text style={styles.quickAccessText}>开始训练</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity style={styles.quickAccessButton}>
+            <View style={[styles.quickAccessIconContainer, { backgroundColor: '#FFD166' }]}>
+              <Ionicons name="restaurant" size={22} color="white" />
+            </View>
+            <Text style={styles.quickAccessText}>饮食记录</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity style={styles.quickAccessButton}>
+            <View style={[styles.quickAccessIconContainer, { backgroundColor: '#FF6B6B' }]}>
+              <Ionicons name="body" size={22} color="white" />
+            </View>
+            <Text style={styles.quickAccessText}>身体数据</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity style={styles.quickAccessButton}>
+            <View style={[styles.quickAccessIconContainer, { backgroundColor: '#4CD97B' }]}>
+              <MaterialCommunityIcons name="robot" size={22} color="white" />
+            </View>
+            <Text style={styles.quickAccessText}>AI 教练</Text>
+          </TouchableOpacity>
+        </View>
+        
+        {/* 今日计划 */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>今日计划</Text>
+          
+          <View style={styles.planItem}>
+            <View style={styles.planItemLeft}>
+              <View style={styles.planIconContainer}>
+                <FontAwesome5 name="dumbbell" size={16} color="white" />
+              </View>
+              <View>
+                <Text style={styles.planTitle}>上肢训练</Text>
+                <Text style={styles.planSubtitle}>30分钟</Text>
+              </View>
+            </View>
+            <View style={styles.planProgress}>
+              <View style={styles.progressBarBackground}>
+                <View style={[styles.progressBar, { width: '40%' }]} />
+              </View>
+            </View>
+          </View>
+          
+          <View style={styles.planItem}>
+            <View style={styles.planItemLeft}>
+              <View style={[styles.planIconContainer, { backgroundColor: '#FFD166' }]}>
+                <Ionicons name="restaurant-outline" size={16} color="white" />
+              </View>
+              <View>
+                <Text style={styles.planTitle}>午餐推荐</Text>
+                <Text style={styles.planSubtitle}>12:30 | 450千卡</Text>
+              </View>
+            </View>
+            <TouchableOpacity style={styles.viewButton}>
+              <Text style={styles.viewButtonText}>查看</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+
+        
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
+  container: {
+    flex: 1,
+    backgroundColor: '#F5F7FA',
+  },
+  headerGradient: {
+    paddingHorizontal: 20,
+    paddingBottom: 30,
+    borderBottomLeftRadius: 25,
+    borderBottomRightRadius: 25,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  greeting: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: 'white',
+  },
+  date: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.8)',
+    marginTop: 4,
+  },
+  profileButton: {
+    padding: 5,
+  },
+  scrollContent: {
+    padding: 16,
+    paddingBottom: 90, // 保留底部空间给导航栏
+  },
+  // 快捷按钮样式
+  quickAccessContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    marginBottom: 16,
+  },
+  quickAccessButton: {
+    width: '48%',
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 10,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  quickAccessIconContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  quickAccessText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+  },
+  card: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 16,
+    color: '#333',
+  },
+  progressGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  progressItem: {
+    alignItems: 'center',
+  },
+  progressValue: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginTop: 8,
+    color: '#333',
+  },
+  progressLabel: {
+    fontSize: 14,
+    color: '#888',
+    marginTop: 2,
+  },
+  progressBarContainer: {
+    marginTop: 8,
+  },
+  progressBarBackground: {
+    height: 8,
+    backgroundColor: '#F0F0F0',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  progressBar: {
+    height: 8,
+    backgroundColor: '#2A86FF',
+    borderRadius: 4,
+  },
+  progressBarText: {
+    fontSize: 12,
+    color: '#888',
+    marginTop: 6,
+    textAlign: 'right',
+  },
+  planItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'space-between',
+    marginBottom: 16,
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  planItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  planIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: '#2A86FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  planTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+  },
+  planSubtitle: {
+    fontSize: 14,
+    color: '#888',
+    marginTop: 2,
+  },
+  planProgress: {
+    width: 100,
+  },
+  viewButton: {
+    backgroundColor: '#F0F7FF',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+  },
+  viewButtonText: {
+    color: '#2A86FF',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  activityItem: {
+    flexDirection: 'row',
+    marginBottom: 16,
+  },
+  activityAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#2A86FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  activityAvatarText: {
+    color: 'white',
+    fontWeight: 'bold',
+  },
+  activityContent: {
+    flex: 1,
+  },
+  activityName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+  },
+  activityText: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 2,
+  },
+  activityHighlight: {
+    color: '#2A86FF',
+    fontWeight: '500',
+  },
+  activityTime: {
+    fontSize: 12,
+    color: '#888',
+    marginTop: 4,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#F0F0F0',
+    marginVertical: 16,
   },
 });
