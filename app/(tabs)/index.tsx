@@ -13,7 +13,7 @@ export default function HomeScreen() {
       <LinearGradient
         colors={['#2A86FF', '#3F99FF']}
         style={styles.headerGradient}>
-        <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
+        <View style={[styles.header, { marginTop: 20  }]}>
           <View>
             <Text style={styles.greeting}>Hi, {userName}</Text>
             <Text style={styles.date}>{currentDate}</Text>

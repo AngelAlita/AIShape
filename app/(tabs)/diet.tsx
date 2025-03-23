@@ -105,7 +105,7 @@ export default function DietScreen() {
         colors={['#2A86FF', '#3F99FF']}
         start={{x: 0, y: 0}}
         end={{x: 0, y: 1}}
-        style={[styles.header, { paddingTop: insets.top + 16 }]}
+        style={[styles.header, { paddingTop:  16 }]}
       >
         <Text style={styles.headerTitle}>饮食管理</Text>
         

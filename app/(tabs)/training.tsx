@@ -324,7 +324,7 @@ export default function TrainingScreen() {
         colors={['#2A86FF', '#3F99FF']}
         start={{x: 0, y: 0}}
         end={{x: 0, y: 1}}
-        style={[styles.header, { paddingTop: insets.top + 16 }]}
+        style={[styles.header, { paddingTop:  16 }]}
       >
         <Text style={styles.headerTitle}>训练管理</Text>
         

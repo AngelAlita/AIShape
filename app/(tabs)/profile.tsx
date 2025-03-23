@@ -101,7 +101,7 @@ export default function ProfileScreen() {
           colors={['#2A86FF', '#3F99FF']}
           start={{x: 0, y: 0}}
           end={{x: 0, y: 1}}
-          style={[styles.header, { paddingTop: insets.top + 20 }]}
+          style={[styles.header, { paddingTop: 16 }]}
         >
           <View style={styles.userInfoContainer}>
             <View style={styles.avatarContainer}>
