@@ -3,22 +3,14 @@ A comprehensive fitness and health tracking mobile application built with Expo a
 
 ## Features
 
-- **Health Dashboard**
-  - Track steps, calories burned, and active minutes
-- **Training Management**
-  - Custom workout plans and progress tracking
-- **Diet Tracking**
-  - Log meals and monitor nutritional intake
-- **Health Analytics**
-  - Visualize health trends through charts and statistics
-- **Body Metrics**
-  - Track weight, BMI, and other physical measurements
-- **AI Coach**
-  - Get personalized workout recommendations
-- **Haptic Feedback**
-  - Enhanced user experience with tactile responses
-- **Parallax Scrolling**
-  - Smooth visual effects during navigation
+- **Health Dashboard**: Track steps, calories burned, and active minutes
+- **Training Management**: Custom workout plans and progress tracking
+- **Diet Tracking**: Log meals and monitor nutritional intake
+- **Health Analytics**: Visualize health trends through charts and statistics
+- **Body Metrics**: Track weight, BMI, and other physical measurements
+- **AI Coach**: Get personalized workout recommendations
+- **Haptic Feedback**: Enhanced user experience with tactile responses
+- **Parallax Scrolling**: Smooth visual effects during navigation
   
 ## Get started
 
