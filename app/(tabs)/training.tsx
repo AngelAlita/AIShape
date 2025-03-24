@@ -1,13 +1,114 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Platform ,Alert} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, MaterialCommunityIcons, FontAwesome5, AntDesign } from '@expo/vector-icons';
+
+import AddWorkoutModal from '../components/training/AddWorkoutModal';
+
+interface Exercise {
+  name: string;
+  sets: number;
+  reps: string;
+  weight: string;
+}
+
+interface Workout {
+  id: number;
+  name: string;
+  time: string;
+  duration: number;
+  calories: number;
+  exercises: Exercise[];
+  completed: boolean;
+}
 
 export default function TrainingScreen() {
   const insets = useSafeAreaInsets();
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [activeTab, setActiveTab] = useState('today'); // 'today', 'history', 'plans'
+  // 添加状态控制模态窗口显示
+  const [modalVisible, setModalVisible] = useState(false);
+  // 修改为useState以允许添加新训练
+  const [todayWorkouts, setTodayWorkouts] = useState([
+    {
+      id: 1,
+      name: '上肢力量训练',
+      time: '09:30 - 10:30',
+      duration: 60,
+      calories: 320,
+      exercises: [
+        { name: '哑铃推举', sets: 3, reps: '12', weight: '15kg' },
+        { name: '坐姿划船', sets: 3, reps: '10', weight: '40kg' },
+        { name: '二头肌弯举', sets: 3, reps: '12', weight: '10kg' },
+        { name: '三头肌下拉', sets: 3, reps: '15', weight: '25kg' }
+      ],
+      completed: true
+    },
+    {
+      id: 2,
+      name: '有氧训练',
+      time: '17:30 - 18:15',
+      duration: 45,
+      calories: 380,
+      exercises: [
+        { name: '跑步机', sets: 1, reps: '25分钟', weight: '6.5km/h' },
+        { name: '椭圆机', sets: 1, reps: '15分钟', weight: '中等强度' }
+      ],
+      completed: false
+    }
+  ]);
+  // 添加训练的处理函数
+  const handleAddWorkout = (newWorkout:Workout) => {
+    setTodayWorkouts([...todayWorkouts, newWorkout]);
+  };
+
+  // 在 handleAddWorkout 函数后添加此函数
+  const handleDeleteWorkout = (workoutId: number) => {
+  // 显示确认对话框
+      Alert.alert(
+      "删除训练",
+      "确定要删除这个训练吗？此操作无法撤销。",
+      [
+        {
+          text: "取消",
+          style: "cancel"
+        },
+        { 
+          text: "删除", 
+          onPress: () => {
+            // 从训练列表中移除指定 ID 的训练
+            const updatedWorkouts = todayWorkouts.filter(workout => workout.id !== workoutId);
+            setTodayWorkouts(updatedWorkouts);
+          },
+          style: "destructive"
+        }
+      ]
+    );
+  };
+
+  const handleWebDelete = (workoutId: number) => {
+    // Web平台使用浏览器原生confirm确认
+    if (Platform.OS === 'web') {
+      console.log("Web平台删除尝试:", workoutId);
+      
+      // 使用浏览器原生confirm提示
+      const confirmDelete = window.confirm("确定要删除这个训练吗？此操作无法撤销。");
+      
+      if (confirmDelete) {
+        console.log("Web平台确认删除:", workoutId);
+        const updatedWorkouts = todayWorkouts.filter(workout => workout.id !== workoutId);
+        setTodayWorkouts(updatedWorkouts);
+      } else {
+        console.log("Web平台取消删除");
+      }
+      return;
+    }
+    
+    // 原生平台使用Alert确认
+    handleDeleteWorkout(workoutId);
+  };
+
 
   // 获取日期数组用于日历显示
   const getDates = () => {
@@ -173,7 +274,7 @@ export default function TrainingScreen() {
       
       <Text style={styles.sectionTitle}>今日训练</Text>
       
-      {todayTraining.map((workout) => (
+      {todayWorkouts.map((workout) => (
         <View key={workout.id} style={styles.workoutCard}>
           <View style={styles.workoutHeader}>
             <View style={styles.workoutTitleContainer}>
@@ -229,11 +330,20 @@ export default function TrainingScreen() {
                 <Text style={styles.workoutStartButtonText}>开始训练</Text>
               </TouchableOpacity>
             )}
+            
+            
+            {/* 添加删除按钮 */}
+            <TouchableOpacity 
+              style={styles.deleteButton}
+              onPress={() => handleWebDelete(workout.id)}
+            >
+              <Ionicons name="trash-outline" size={16} color="#FF6B6B" />
+            </TouchableOpacity>
           </View>
         </View>
       ))}
       
-      <TouchableOpacity style={styles.addWorkoutButton}>
+      <TouchableOpacity style={styles.addWorkoutButton} onPress={() => setModalVisible(true)}>
         <LinearGradient
           colors={['#2A86FF', '#3F99FF']}
           start={{x: 0, y: 0}}
@@ -404,6 +514,14 @@ export default function TrainingScreen() {
         {activeTab === 'history' && renderTrainingHistory()}
         {activeTab === 'plans' && renderTrainingPlans()}
       </ScrollView>
+
+      {/* 添加模态窗口组件 */}
+      <AddWorkoutModal
+        visible={modalVisible}
+        onClose={() => setModalVisible(false)}
+        onAddWorkout={handleAddWorkout}
+        existingWorkouts={todayWorkouts}
+      />
     </View>
   );
 }
@@ -652,7 +770,9 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#F0F0F0',
     padding: 16,
-    alignItems: 'flex-end',
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
   },
   workoutButton: {
     flexDirection: 'row',
@@ -841,4 +961,21 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
+  // 在 styles 对象中添加以下样式
+  workoutActionButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%',
+  },
+  deleteButton: {
+    padding: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#FF6B6B',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 10,
+  },
 });
+
