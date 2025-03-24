@@ -5,6 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, MaterialCommunityIcons, FontAwesome5, AntDesign } from '@expo/vector-icons';
 
 import AddWorkoutModal from '../components/training/AddWorkoutModal';
+import WorkoutSession from '../components/training/WorkoutSession';
 
 interface Exercise {
   name: string;
@@ -58,10 +59,75 @@ export default function TrainingScreen() {
       completed: false
     }
   ]);
+
+  // 添加新状态跟踪当前正在执行的训练
+  const [activeWorkout, setActiveWorkout] = useState<Workout | null>(null);
+  const [sessionVisible, setSessionVisible] = useState(false);
+
+    // 开始训练的处理函数
+    const handleStartWorkout = (workout: Workout) => {
+      setActiveWorkout(workout);
+      setSessionVisible(true);
+    };
+    
+    // 完成训练的处理函数
+    const handleCompleteWorkout = (workoutId: number) => {
+      // 更新训练状态为已完成
+      const updatedWorkouts = todayWorkouts.map(workout => 
+        workout.id === workoutId 
+          ? { ...workout, completed: true } 
+          : workout
+      );
+      setTodayWorkouts(updatedWorkouts);
+      
+      // 更新周训练统计
+      // 这里可以添加更新训练统计数据的逻辑
+      
+      // 关闭训练会话
+      setSessionVisible(false);
+      setActiveWorkout(null);
+    };
+
   // 添加训练的处理函数
   const handleAddWorkout = (newWorkout:Workout) => {
     setTodayWorkouts([...todayWorkouts, newWorkout]);
   };
+
+  // 获取当前时间范围的辅助函数
+  const getCurrentTimeRange = () => {
+    const now = new Date();
+    const start = now.toLocaleTimeString('zh-CN', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    });
+    
+    // 假设训练持续时间为workout的duration
+    const end = new Date(now.getTime() + 60 * 60 * 1000).toLocaleTimeString('zh-CN', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    });
+    
+    return `${start} - ${end}`;
+  };
+
+  // 再次训练的处理函数
+  const handleRestartWorkout = (workout: Workout) => {
+    // 创建训练的副本，重置完成状态
+    const restartedWorkout: Workout = {
+      ...workout,
+      id: Math.max(...todayWorkouts.map(w => w.id)) + 1, // 分配新ID
+      completed: false,
+      time: getCurrentTimeRange(), // 更新时间范围
+    };
+  
+
+  // 将训练添加到列表并开始训练
+  setTodayWorkouts([...todayWorkouts, restartedWorkout]);
+  setActiveWorkout(restartedWorkout);
+  setSessionVisible(true);
+};
 
   // 在 handleAddWorkout 函数后添加此函数
   const handleDeleteWorkout = (workoutId: number) => {
@@ -291,12 +357,17 @@ export default function TrainingScreen() {
           
           <View style={styles.workoutActions}>
             {workout.completed ? (
-              <TouchableOpacity style={styles.workoutButton}>
+              <TouchableOpacity style={styles.workoutButton}
+              onPress={() => handleRestartWorkout(workout)}
+              >
                 <Ionicons name="refresh" size={16} color="#2A86FF" />
                 <Text style={styles.workoutButtonText}>再次训练</Text>
               </TouchableOpacity>
             ) : (
-              <TouchableOpacity style={styles.workoutStartButton}>
+              <TouchableOpacity 
+                style={styles.workoutStartButton}
+                onPress={() => handleStartWorkout(workout)}
+              >
                 <Ionicons name="play" size={16} color="white" />
                 <Text style={styles.workoutStartButtonText}>开始训练</Text>
               </TouchableOpacity>
@@ -326,6 +397,7 @@ export default function TrainingScreen() {
       </TouchableOpacity>
     </>
   );
+
 
   // 渲染历史记录
   const renderTrainingHistory = () => (
@@ -493,6 +565,16 @@ export default function TrainingScreen() {
         onAddWorkout={handleAddWorkout}
         existingWorkouts={todayWorkouts}
       />
+
+      {/* 训练执行会话模态窗口 */}
+      {activeWorkout && (
+        <WorkoutSession
+          visible={sessionVisible}
+          workout={activeWorkout}
+          onClose={() => setSessionVisible(false)}
+          onComplete={handleCompleteWorkout}
+        />
+      )}
     </View>
   );
 }
