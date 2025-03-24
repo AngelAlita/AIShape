@@ -11,7 +11,15 @@ A comprehensive fitness and health tracking mobile application built with Expo a
 - **AI Coach**: Get personalized workout recommendations
 - **Haptic Feedback**: Enhanced user experience with tactile responses
 - **Parallax Scrolling**: Smooth visual effects during navigation
-  
+
+## Snapshots
+[<img src="./assets/Screenshot_1742823936.png" alt="Home" width="170" />](./assets/Screenshot_1742823936.png)
+[<img src="./assets/Screenshot_1742823947.png" alt="Train" width="170" />](./assets/Screenshot_1742823947.png)
+[<img src="./assets/Screenshot_1742823950.png" alt="Diet" width="170" />](./assets/Screenshot_1742823950.png)
+[<img src="./assets/Screenshot_1742823952.png" alt="Data" width="170" />](./assets/Screenshot_1742823952.png)
+[<img src="./assets/Screenshot_1742823954.png" alt="Profile" width="170" />](./assets/Screenshot_1742823954.png)
+
+
 ## Get started
 
 1. Install dependencies
