@@ -140,35 +140,6 @@ export default function TrainingScreen() {
     streak: 3 // 连续训练天数
   };
 
-  // 模拟今日训练计划
-  const todayTraining = [
-    {
-      id: 1,
-      name: '上肢力量训练',
-      time: '09:30 - 10:30',
-      duration: 60,
-      calories: 320,
-      exercises: [
-        { name: '哑铃推举', sets: 3, reps: '12', weight: '15kg' },
-        { name: '坐姿划船', sets: 3, reps: '10', weight: '40kg' },
-        { name: '二头肌弯举', sets: 3, reps: '12', weight: '10kg' },
-        { name: '三头肌下拉', sets: 3, reps: '15', weight: '25kg' }
-      ],
-      completed: true
-    },
-    {
-      id: 2,
-      name: '有氧训练',
-      time: '17:30 - 18:15',
-      duration: 45,
-      calories: 380,
-      exercises: [
-        { name: '跑步机', sets: 1, reps: '25分钟', weight: '6.5km/h' },
-        { name: '椭圆机', sets: 1, reps: '15分钟', weight: '中等强度' }
-      ],
-      completed: false
-    }
-  ];
 
   // 模拟历史训练记录
   const trainingHistory = [
