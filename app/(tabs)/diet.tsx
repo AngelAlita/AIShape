@@ -5,7 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import { CameraView, CameraType, useCameraPermissions, CameraCapturedPicture } from 'expo-camera';
 import * as FileSystem from 'expo-file-system';
-import ResultModal, { ResultModalProps } from './ResultModal';
+import ResultModal, { ResultModalProps } from '../components/ResultModal';
 const nutritionData = {
   calories: {
     current: 1450,
