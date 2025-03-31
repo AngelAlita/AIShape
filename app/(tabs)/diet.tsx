@@ -1,77 +1,168 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Platform } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Platform, Button } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
-
+import { CameraView, CameraType, useCameraPermissions, CameraCapturedPicture } from 'expo-camera';
+import * as FileSystem from 'expo-file-system';
+import ResultModal, { ResultModalProps } from './ResultModal';
+const nutritionData = {
+  calories: {
+    current: 1450,
+    goal: 2200
+  },
+  protein: {
+    current: 76,
+    goal: 120
+  },
+  carbs: {
+    current: 156,
+    goal: 220
+  },
+  fats: {
+    current: 48,
+    goal: 73
+  }
+};
+const initialMeals = [
+  {
+    id: 1,
+    type: '早餐',
+    time: '08:30',
+    calories: 420,
+    completed: true,
+    foods: [
+      { name: '全麦面包', amount: '2片', calories: 180 },
+      { name: '鸡蛋', amount: '2个', calories: 160 },
+      { name: '牛奶', amount: '250ml', calories: 80 }
+    ]
+  },
+  {
+    id: 2,
+    type: '午餐',
+    time: '12:30',
+    calories: 680,
+    completed: true,
+    foods: [
+      { name: '糙米饭', amount: '1碗', calories: 220 },
+      { name: '鸡胸肉', amount: '100g', calories: 165 },
+      { name: '西兰花', amount: '100g', calories: 55 },
+      { name: '胡萝卜', amount: '50g', calories: 25 },
+      { name: '橙子', amount: '1个', calories: 65 }
+    ]
+  },
+  {
+    id: 3,
+    type: '晚餐',
+    time: '18:30',
+    calories: 580,
+    completed: false,
+    foods: [
+      { name: '全麦面条', amount: '100g', calories: 190 },
+      { name: '鲑鱼', amount: '150g', calories: 240 },
+      { name: '混合蔬菜', amount: '150g', calories: 80 },
+      { name: '橄榄油', amount: '1勺', calories: 40 },
+      { name: '苹果', amount: '1个', calories: 80 }
+    ]
+  }
+];
+const BAIDU_TOKEN_URL = 'https://aip.baidubce.com/oauth/2.0/token?client_id=RfDGbYIhxqmPZrRkW4UFHMDk&client_secret=RWgORkellxRcCKs0aBWSmszuxhoSxQiR&grant_type=client_credentials';
 export default function DietScreen() {
   const insets = useSafeAreaInsets();
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [facing, setFacing] = useState<CameraType>('back');
+  const [permission, requestPermission] = useCameraPermissions();
+  const [isCameraVisible, setIsCameraVisible] = useState(false);
+  const [token, setToken] = useState(null);
+  const cameraRef = useRef<any>(null);
+  const [resultData, setResultData] = useState<ResultModalProps['result']>([]);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [currentMealId, setCurrentMealId] = useState<number | null>(null);
   
-  // 模拟每日摄入数据
-  const nutritionData = {
-    calories: {
-      current: 1450,
-      goal: 2200
-    },
-    protein: {
-      current: 76,
-      goal: 120
-    },
-    carbs: {
-      current: 156,
-      goal: 220
-    },
-    fats: {
-      current: 48,
-      goal: 73
+  const [meals, setMeals] = useState(initialMeals);
+  useEffect(() => {
+    const fetchToken = async () => {
+      try {
+        const res = await fetch(BAIDU_TOKEN_URL);
+        const data = await res.json();
+        setToken(data.access_token);
+      } catch (err) {
+        console.warn('获取百度 token 失败:', err);
+      }
+    };
+    fetchToken();
+  }, []);
+  // 显示摄像头
+  function toggleCameraVisibility() {
+    setIsCameraVisible(!isCameraVisible);
+  }
+  function toggleCameraFacing() {
+    setFacing(current => (current === 'back' ? 'front' : 'back'));
+  }
+  const detectFood = async () => {
+    if (!token) {
+      console.warn('⚠️ 缺少百度 token');
+      return;
+    }
+
+    try {
+      // ✅ 真正拍照，不再使用 captureRef
+      const photo: CameraCapturedPicture = await cameraRef.current.takePictureAsync({
+        base64: true,
+        qualityPrioritization: 'quality',
+        skipMetadata: false,
+      });
+
+      const base64 = photo.base64;
+      const uri = photo.uri;
+
+      console.log('📸 拍照成功:', uri);
+
+      // ✅ 保存 base64 图片到本地临时文件
+      const fileUri = FileSystem.documentDirectory + `food_${Date.now()}.jpg`;
+      if (!base64) {
+        console.warn('⚠️ 拍照失败：base64 不存在');
+        return;
+      }
+      await FileSystem.writeAsStringAsync(fileUri, base64, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      // ✅ 上传给百度识别
+      const res = await fetch(
+        `https://aip.baidubce.com/rest/2.0/image-classify/v2/dish?access_token=${token}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: `image=${encodeURIComponent(base64)}`,
+        }
+      );
+
+      const result = await res.json();
+      console.log('🍜 百度食物识别结果:', result);
+      setResultData(result.result);
+      setModalVisible(true);
+
+    } catch (error) {
+      console.error('❌ 拍照或识别失败:', error);
     }
   };
-  
-  // 模拟膳食数据
-  const meals = [
-    {
-      id: 1,
-      type: '早餐',
-      time: '08:30',
-      calories: 420,
-      completed: true,
-      foods: [
-        { name: '全麦面包', amount: '2片', calories: 180 },
-        { name: '鸡蛋', amount: '2个', calories: 160 },
-        { name: '牛奶', amount: '250ml', calories: 80 }
-      ]
-    },
-    {
-      id: 2,
-      type: '午餐',
-      time: '12:30',
-      calories: 680,
-      completed: true,
-      foods: [
-        { name: '糙米饭', amount: '1碗', calories: 220 },
-        { name: '鸡胸肉', amount: '100g', calories: 165 },
-        { name: '西兰花', amount: '100g', calories: 55 },
-        { name: '胡萝卜', amount: '50g', calories: 25 },
-        { name: '橙子', amount: '1个', calories: 65 }
-      ]
-    },
-    {
-      id: 3,
-      type: '晚餐',
-      time: '18:30',
-      calories: 580,
-      completed: false,
-      foods: [
-        { name: '全麦面条', amount: '100g', calories: 190 },
-        { name: '鲑鱼', amount: '150g', calories: 240 },
-        { name: '混合蔬菜', amount: '150g', calories: 80 },
-        { name: '橄榄油', amount: '1勺', calories: 40 },
-        { name: '苹果', amount: '1个', calories: 80 }
-      ]
-    }
-  ];
-  
+
+
+  if (!permission) {
+    // Camera permissions are still loading.
+    return <View />;
+  }
+  if (!permission.granted) {
+    // Camera permissions are not granted yet.
+    return (
+      <View style={styles.container}>
+        <Text style={styles.addFoodText}>We need your permission to show the camera</Text>
+        <Button onPress={requestPermission} title="grant permission" />
+      </View>
+    );
+  }
   // 获取日期数组用于日历显示
   const getDates = () => {
     const dates = [];
@@ -88,19 +179,78 @@ export default function DietScreen() {
   };
   
   // 格式化日期为星期几
-    const formatDayName = (date: Date) => {
-      const days = ['日', '一', '二', '三', '四', '五', '六'];
-      return days[date.getDay()];
-    };
-  
-  
+  const formatDayName = (date: Date) => {
+    const days = ['日', '一', '二', '三', '四', '五', '六'];
+    return days[date.getDay()];
+  };
   // 计算营养进度百分比
   const calculatePercentage = (current: number, goal: number) => {
     return Math.min(Math.round((current / goal) * 100), 100);
   };
-  
   return (
     <View style={styles.container}>
+      {/* 摄像头显示控制 */}
+      {isCameraVisible && (
+        <View style={styles.cameraContainer}>
+          <CameraView style={styles.camera} facing={facing} ref={cameraRef}>
+            {/* 切换镜头 */}
+            <TouchableOpacity style={styles.closeButton} onPress={toggleCameraFacing}>
+              <Ionicons name="camera-reverse" size={40} color="white" />
+            </TouchableOpacity>
+
+            {/* 返回 */}
+            <TouchableOpacity style={styles.backButton} onPress={toggleCameraVisibility}>
+              <Ionicons name="arrow-back" size={40} color="white" />
+            </TouchableOpacity>
+          </CameraView>
+          <TouchableOpacity style={styles.recognizeFood} onPress={detectFood}>
+            <LinearGradient
+              colors={['#2A86FF', '#3F99FF']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.addFoodGradient}
+            >
+              <Ionicons name="add" size={24} color="white" />
+              <Text style={styles.addFoodText}>识别食物</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+          <ResultModal
+            visible={modalVisible}
+            result={resultData}
+            onClose={() => setModalVisible(false)}
+            onConfirm={({ name, weight, energy }) => {
+              console.log('📥 用户确认记录:', name, weight, energy);
+              setModalVisible(false);
+              setIsCameraVisible(false); // ✅ 关闭相机
+            
+              if (currentMealId !== null) {
+                const newFood = {
+                  name,
+                  amount: `${weight}g`,
+                  calories: Math.round(energy),
+                };
+            
+                // ✅ 更新 meals 数组
+                setMeals(prev =>
+                  prev.map(meal =>
+                    meal.id === currentMealId
+                      ? {
+                          ...meal,
+                          completed: true,
+                          calories: meal.calories + newFood.calories,
+                          foods: [...meal.foods, newFood],
+                        }
+                      : meal
+                  )
+                );
+            
+                setCurrentMealId(null); // 清除状态
+              }
+            }}
+          />
+        </View>
+      )}
+
       <LinearGradient
         colors={['#2A86FF', '#3F99FF']}
         start={{x: 0, y: 0}}
@@ -278,39 +428,34 @@ export default function DietScreen() {
               </View>
               
               <View style={styles.mealActions}>
-                {meal.completed ? (
-                  <TouchableOpacity style={styles.mealButton}>
-                    <MaterialCommunityIcons name="pencil-outline" size={16} color="#2A86FF" />
-                    <Text style={styles.mealButtonText}>编辑</Text>
-                  </TouchableOpacity>
-                ) : (
-                  <TouchableOpacity style={styles.mealAddButton}>
+                <TouchableOpacity
+                    style={styles.mealAddButton}
+                    onPress={() => {
+                      setCurrentMealId(meal.id);   // ✅ 记录当前餐
+                      setIsCameraVisible(true);    // ✅ 打开摄像头
+                    }}
+                  >
                     <Ionicons name="add" size={16} color="white" />
                     <Text style={styles.mealAddButtonText}>记录此餐</Text>
-                  </TouchableOpacity>
-                )}
+                </TouchableOpacity>
               </View>
             </View>
           ))}
         </View>
         
-        {/* 添加食物按钮 */}
-        <TouchableOpacity style={styles.addFoodButton}>
-          <LinearGradient
-            colors={['#2A86FF', '#3F99FF']}
-            start={{x: 0, y: 0}}
-            end={{x: 1, y: 0}}
-            style={styles.addFoodGradient}>
-            <Ionicons name="add" size={24} color="white" />
-            <Text style={styles.addFoodText}>添加食物</Text>
-          </LinearGradient>
-        </TouchableOpacity>
+
       </ScrollView>
+      
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  recognizeFood:{
+    position: 'absolute',
+    bottom: 40,
+    alignSelf: 'center',
+  },
   container: {
     flex: 1,
     backgroundColor: '#F5F7FA',
@@ -341,10 +486,31 @@ const styles = StyleSheet.create({
   selectedDateItem: {
     backgroundColor: 'white',
   },
+  cameraContainer: {
+    position: 'absolute', // 将摄像头放置在页面最上层
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 1, // 确保其他内容在摄像头之上
+  },
+  camera: {
+    width: '100%',
+    height: '100%',
+  },
   dateDay: {
     fontSize: 18,
     fontWeight: 'bold',
     color: 'white',
+  },
+  closeButton: {
+    position: 'absolute',
+    top: 40,
+    left: 20,
+    zIndex: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: 20,
+    padding: 8,
   },
   dateWeekday: {
     fontSize: 12,
@@ -382,6 +548,15 @@ const styles = StyleSheet.create({
         elevation: 2,
       }
     }),
+  },
+  backButton: {
+    position: 'absolute',
+    top: 40,
+    right: 20,
+    zIndex: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: 20,
+    padding: 8,
   },
   cardTitle: {
     fontSize: 16,
