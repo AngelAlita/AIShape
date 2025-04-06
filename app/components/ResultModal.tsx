@@ -1,24 +1,28 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import Modal from 'react-native-modal';
+import { Float } from 'react-native/Libraries/Types/CodegenTypes';
 
 export type ResultModalProps = {
   visible: boolean;
   onClose: () => void;
   onConfirm: (data: { name: string; weight: number; energy: number }) => void;
   result: {
-    name: string;
-    calorie: string;  // 每 100 克的卡路里数
+    name: string,
+    weight: Float,
+    calorie: Float, // 提取数字部分
+    protein: Float,
+    fat: Float,
+    carbs: Float,
   }[];
 };
 
 const ResultModal: React.FC<ResultModalProps> = ({ visible, onClose, result, onConfirm }) => {
   const top = result?.[0];
   const [weight, setWeight] = useState('');
-  const randomWeight = Math.floor(Math.random() * (300 - 80 + 1)) + 80; // 80 ~ 300g
+
 
   if (!top) return null;
-  const energyInKcal = (parseFloat(top.calorie) * randomWeight) / 100;
 
   return (
     <Modal
@@ -30,17 +34,19 @@ const ResultModal: React.FC<ResultModalProps> = ({ visible, onClose, result, onC
       <View style={styles.modal}>
         <Text style={styles.title}>🍽 识别结果</Text>
         <Text style={styles.name}>· {top.name.trim()}</Text>
-        <Text style={styles.detail}>🔥 热量：{top.calorie} kcal (每 100 克)</Text>
-        <Text style={styles.detail}>🍚 重量：{randomWeight} 克</Text>
-        <Text style={styles.detail}>💥 能量：{energyInKcal.toFixed(2)} kcal</Text>
-        
+        <Text style={styles.detail}>🔥 热量：{top.calorie} kcal </Text>
+        <Text style={styles.detail}>🍚 重量：{top.weight} 克</Text>
+        <Text style={styles.detail}>🥩 蛋白质：{top.protein} g</Text>
+        <Text style={styles.detail}>🥑 脂肪：{top.fat} g</Text>
+        <Text style={styles.detail}>🍞 碳水化合物：{top.carbs} g</Text>
+
         <TouchableOpacity
           style={styles.confirmButton}
           onPress={() => {
             onConfirm({
               name: top.name.trim(),
-              weight: randomWeight,
-              energy: energyInKcal,  // 将能量传递出去
+              weight: top.weight,
+              energy: top.calorie,  // 将能量传递出去
             });
           }}
         >

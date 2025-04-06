@@ -2,12 +2,53 @@ import { ScrollView, StyleSheet, View, Text, TouchableOpacity } from 'react-nati
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
+import { Alert } from 'react-native';
 
 export default function HomeScreen() {
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const currentDate = "2024年2月6日";
   const userName = "小明";
+  // 添加跳转到个人页面的函数
+  const navigateToProfile = () => {
+    router.push('/profile');
+  };
   
+  // 饮食记录按钮处理函数
+  const handleDietRecord = () => {
+    Alert.alert(
+      "记录膳食",
+      "请选择要记录的餐点",
+      [
+        {
+          text: "早餐",
+          onPress: () => navigateToDiet(1)
+        },
+        {
+          text: "午餐",
+          onPress: () => navigateToDiet(2)
+        },
+        {
+          text: "晚餐",
+          onPress: () => navigateToDiet(3)
+        },
+        {
+          text: "取消",
+          style: "cancel"
+        }
+      ]
+    );
+  };
+
+  // 导航到饮食页面并设置要记录的餐点
+  const navigateToDiet = (mealId: number) => {
+    router.push({
+      pathname: "/diet",
+      params: { mealId: mealId.toString(), openCamera: "true" }
+    });
+  };
+
   return (
     <View style={styles.container}>
       <LinearGradient
@@ -18,7 +59,10 @@ export default function HomeScreen() {
             <Text style={styles.greeting}>Hi, {userName}</Text>
             <Text style={styles.date}>{currentDate}</Text>
           </View>
-          <TouchableOpacity style={styles.profileButton}>
+          <TouchableOpacity 
+            style={styles.profileButton}
+            onPress={navigateToProfile} // 添加点击事件处理函数
+          >
             <Ionicons name="person-circle-outline" size={40} color="white" />
           </TouchableOpacity>
         </View>
@@ -65,7 +109,11 @@ export default function HomeScreen() {
             <Text style={styles.quickAccessText}>开始训练</Text>
           </TouchableOpacity>
           
-          <TouchableOpacity style={styles.quickAccessButton}>
+          {/* 饮食记录按钮 - 增加点击处理 */}
+          <TouchableOpacity 
+            style={styles.quickAccessButton}
+            onPress={handleDietRecord}
+          >
             <View style={[styles.quickAccessIconContainer, { backgroundColor: '#FFD166' }]}>
               <Ionicons name="restaurant" size={22} color="white" />
             </View>

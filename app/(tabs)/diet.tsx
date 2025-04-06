@@ -1,73 +1,62 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Platform, Button } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Platform, Button,Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import { CameraView, CameraType, useCameraPermissions, CameraCapturedPicture } from 'expo-camera';
 import * as FileSystem from 'expo-file-system';
 import ResultModal, { ResultModalProps } from '../components/ResultModal';
-const nutritionData = {
-  calories: {
-    current: 1450,
-    goal: 2200
-  },
-  protein: {
-    current: 76,
-    goal: 120
-  },
-  carbs: {
-    current: 156,
-    goal: 220
-  },
-  fats: {
-    current: 48,
-    goal: 73
-  }
-};
-const initialMeals = [
+import { useLocalSearchParams } from 'expo-router';
+
+interface Food {
+  name: string;
+  amount: string;
+  calories: number;
+}
+
+interface Meal {
+  id: number;
+  type: string;
+  time: string;
+  calories: number;
+  completed: boolean;
+  foods: Food[];
+}
+
+const initialMeals: Meal[] = [
   {
     id: 1,
     type: '早餐',
-    time: '08:30',
-    calories: 420,
-    completed: true,
-    foods: [
-      { name: '全麦面包', amount: '2片', calories: 180 },
-      { name: '鸡蛋', amount: '2个', calories: 160 },
-      { name: '牛奶', amount: '250ml', calories: 80 }
-    ]
+    time: '',
+    calories: 0,
+    completed: false,
+    foods: [] // 明确是 Food[] 类型的空数组
   },
   {
     id: 2,
     type: '午餐',
-    time: '12:30',
-    calories: 680,
-    completed: true,
-    foods: [
-      { name: '糙米饭', amount: '1碗', calories: 220 },
-      { name: '鸡胸肉', amount: '100g', calories: 165 },
-      { name: '西兰花', amount: '100g', calories: 55 },
-      { name: '胡萝卜', amount: '50g', calories: 25 },
-      { name: '橙子', amount: '1个', calories: 65 }
-    ]
+    time: '',
+    calories: 0,
+    completed: false,
+    foods: []
   },
   {
     id: 3,
     type: '晚餐',
-    time: '18:30',
-    calories: 580,
+    time: '',
+    calories: 0,
     completed: false,
-    foods: [
-      { name: '全麦面条', amount: '100g', calories: 190 },
-      { name: '鲑鱼', amount: '150g', calories: 240 },
-      { name: '混合蔬菜', amount: '150g', calories: 80 },
-      { name: '橄榄油', amount: '1勺', calories: 40 },
-      { name: '苹果', amount: '1个', calories: 80 }
-    ]
+    foods: []
   }
 ];
+
+
 const BAIDU_TOKEN_URL = 'https://aip.baidubce.com/oauth/2.0/token?client_id=RfDGbYIhxqmPZrRkW4UFHMDk&client_secret=RWgORkellxRcCKs0aBWSmszuxhoSxQiR&grant_type=client_credentials';
 export default function DietScreen() {
+  const searchParams = useLocalSearchParams();
+  const mealIdParam = searchParams.mealId as string;
+  const openCameraParam = searchParams.openCamera as string;
+
   const insets = useSafeAreaInsets();
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [facing, setFacing] = useState<CameraType>('back');
@@ -78,7 +67,25 @@ export default function DietScreen() {
   const [resultData, setResultData] = useState<ResultModalProps['result']>([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [currentMealId, setCurrentMealId] = useState<number | null>(null);
-  
+  const [nutritionData, setNutritionData] = useState({
+    calories: {
+      current: 0,
+      goal: 2200
+    },
+    protein: {
+      current: 0,
+      goal: 120
+    },
+    carbs: {
+      current: 0,
+      goal: 220
+    },
+    fats: {
+      current: 0,
+      goal: 73
+    }
+  });
+
   const [meals, setMeals] = useState(initialMeals);
   useEffect(() => {
     const fetchToken = async () => {
@@ -92,6 +99,30 @@ export default function DietScreen() {
     };
     fetchToken();
   }, []);
+
+  useEffect(() => {
+    if (openCameraParam === 'true' && mealIdParam) {
+      const mealId = parseInt(mealIdParam, 10);
+      
+      // 检查相机权限并自动打开相机
+      const openCamera = async () => {
+        if (!permission?.granted) {
+          const permissionResult = await requestPermission();
+          if (!permissionResult.granted) {
+            Alert.alert("需要相机权限", "请允许访问相机以便记录食物");
+            return;
+          }
+        }
+        
+        // 设置当前餐点ID和打开相机
+        setCurrentMealId(mealId);
+        setIsCameraVisible(true);
+      };
+      
+      openCamera();
+    }
+  }, [openCameraParam, mealIdParam, permission]);
+  
   // 显示摄像头
   function toggleCameraVisibility() {
     setIsCameraVisible(!isCameraVisible);
@@ -129,24 +160,55 @@ export default function DietScreen() {
       });
       // ✅ 上传给百度识别
       const res = await fetch(
-        `https://aip.baidubce.com/rest/2.0/image-classify/v2/dish?access_token=${token}`,
+        // `https://aip.baidubce.com/rest/2.0/image-classify/v2/dish?access_token=${token}`,
+        `http://1.94.60.194:5000/api/diet_recognition`,
         {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
+            'Content-Type': 'application/json',
           },
-          body: `image=${encodeURIComponent(base64)}`,
+          body: JSON.stringify({  
+            image: base64,  
+          }),
         }
       );
-
+  
       const result = await res.json();
-      console.log('🍜 百度食物识别结果:', result);
-      setResultData(result.result);
+
+      // const result = {
+      //   '食物名称': '烤鸭',
+      //   '重量': '200g',
+      //   '卡路里': '500',
+      //   '蛋白质': '30',
+      //   '脂肪': '20',
+      //   '碳水化合物': '50',
+      // }
+      
+      console.log('🍜 食物识别结果:', result);
+      const mappedResult = [{
+        name: result['食物名称'],
+        weight: parseFloat(result['重量']), // 确保是数字
+        calorie: parseFloat(result['卡路里']), // 确保是数字
+        protein: parseFloat(result['蛋白质']),
+        fat: parseFloat(result['脂肪']),
+        carbs: parseFloat(result['碳水化合物']),
+      }];
+
+      setResultData(mappedResult);
       setModalVisible(true);
 
     } catch (error) {
       console.error('❌ 拍照或识别失败:', error);
-    }
+      setIsCameraVisible(false);
+    // 显示友好的错误提示
+      Alert.alert(
+          "识别失败", 
+          "暂时无法识别食物，请重试",
+          [
+            { text: "确定" }
+          ]
+        );
+      }
   };
 
 
@@ -223,11 +285,24 @@ export default function DietScreen() {
               setModalVisible(false);
               setIsCameraVisible(false); // ✅ 关闭相机
             
-              if (currentMealId !== null) {
+              if (currentMealId !== null ) {
+                // 获取当前时间
+                const now = new Date();
+                const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+                
+                // 从结果中获取营养数据
+                const selectedFood = resultData[0]; // 假设只有一个结果
+                
+                // 计算实际的营养值（可以根据重量进行调整）
+                const calorieValue = Math.round(selectedFood.calorie);
+                const proteinValue = Math.round(selectedFood.protein);
+                const fatValue = Math.round(selectedFood.fat);
+                const carbsValue = Math.round(selectedFood.carbs);
+                
                 const newFood = {
                   name,
                   amount: `${weight}g`,
-                  calories: Math.round(energy),
+                  calories: calorieValue,
                 };
             
                 // ✅ 更新 meals 数组
@@ -236,6 +311,7 @@ export default function DietScreen() {
                     meal.id === currentMealId
                       ? {
                           ...meal,
+                          time: currentTime, // ✅ 更新时间为当前时间
                           completed: true,
                           calories: meal.calories + newFood.calories,
                           foods: [...meal.foods, newFood],
@@ -243,7 +319,25 @@ export default function DietScreen() {
                       : meal
                   )
                 );
-            
+                // ✅ 更新总营养数据
+                setNutritionData(prev => ({
+                  calories: {
+                    ...prev.calories,
+                    current: prev.calories.current + calorieValue,
+                  },
+                  protein: {
+                    ...prev.protein,
+                    current: prev.protein.current + proteinValue,
+                  },
+                  carbs: {
+                    ...prev.carbs,
+                    current: prev.carbs.current + carbsValue,
+                  },
+                  fats: {
+                    ...prev.fats,
+                    current: prev.fats.current + fatValue,
+                  },
+                }));
                 setCurrentMealId(null); // 清除状态
               }
             }}
@@ -406,9 +500,13 @@ export default function DietScreen() {
                     )}
                   </View>
                   <View>
-                    <Text style={styles.mealType}>{meal.type}</Text>
-                    <Text style={styles.mealTime}>{meal.time}</Text>
-                  </View>
+                        <Text style={styles.mealType}>{meal.type}</Text>
+                        {meal.time ? (
+                          <Text style={styles.mealTime}>{meal.time}</Text>
+                        ) : (
+                          <Text style={styles.mealTimeEmpty}>未记录时间</Text>
+                        )}
+                      </View>
                 </View>
                 <View style={styles.mealCalories}>
                   <Text style={styles.mealCaloriesText}>{meal.calories} 千卡</Text>
@@ -739,6 +837,12 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: '#F0F0F0',
+  },
+  mealTimeEmpty: {
+    fontSize: 12,
+    color: '#AAA', // 更浅的颜色
+    fontStyle: 'italic',
+    marginTop: 2,
   },
   mealButton: {
     flexDirection: 'row',
