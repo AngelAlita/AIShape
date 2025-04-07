@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Platform, Button,Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Platform, Button,Alert ,ActivityIndicator} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
@@ -50,7 +50,32 @@ const initialMeals: Meal[] = [
   }
 ];
 
-
+const foodDatabase = [
+  {
+    "食物名称": "纯牛奶",
+    "重量": "250g",
+    "卡路里": "170",
+    "蛋白质": "8.0",
+    "脂肪": "10.0",
+    "碳水化合物": "12.0"
+  },
+  {
+    "食物名称": "麻辣烫",
+    "重量": "500g",
+    "卡路里": "750",
+    "蛋白质": "35",
+    "脂肪": "40",
+    "碳水化合物": "65"
+  },
+  {
+    "食物名称": "鱼香肉丝",
+    "重量": "350g",
+    "卡路里": "620",
+    "蛋白质": "38",
+    "脂肪": "38",
+    "碳水化合物": "28"
+  },
+];
 const BAIDU_TOKEN_URL = 'https://aip.baidubce.com/oauth/2.0/token?client_id=RfDGbYIhxqmPZrRkW4UFHMDk&client_secret=RWgORkellxRcCKs0aBWSmszuxhoSxQiR&grant_type=client_credentials';
 export default function DietScreen() {
   const searchParams = useLocalSearchParams();
@@ -85,6 +110,8 @@ export default function DietScreen() {
       goal: 73
     }
   });
+  const [isRecognizing, setIsRecognizing] = useState(false);
+  const [currentFoodIndex, setCurrentFoodIndex] = useState(0);
 
   const [meals, setMeals] = useState(initialMeals);
   useEffect(() => {
@@ -125,6 +152,10 @@ export default function DietScreen() {
   
   // 显示摄像头
   function toggleCameraVisibility() {
+    if (isCameraVisible) {
+      // 如果要关闭相机，也清除结果数据
+      setResultData([]);
+    }
     setIsCameraVisible(!isCameraVisible);
   }
   function toggleCameraFacing() {
@@ -136,6 +167,7 @@ export default function DietScreen() {
       return;
     }
 
+    setIsRecognizing(true);
     try {
       // ✅ 真正拍照，不再使用 captureRef
       const photo: CameraCapturedPicture = await cameraRef.current.takePictureAsync({
@@ -159,30 +191,30 @@ export default function DietScreen() {
         encoding: FileSystem.EncodingType.Base64,
       });
       // ✅ 上传给百度识别
-      const res = await fetch(
-        // `https://aip.baidubce.com/rest/2.0/image-classify/v2/dish?access_token=${token}`,
-        `http://1.94.60.194:5000/api/diet_recognition`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({  
-            image: base64,  
-          }),
-        }
-      );
+      // const res = await fetch(
+      //   // `https://aip.baidubce.com/rest/2.0/image-classify/v2/dish?access_token=${token}`,
+      //   `http://1.94.60.194:5000/api/diet_recognition`,
+      //   {
+      //     method: 'POST',
+      //     headers: {
+      //       'Content-Type': 'application/json',
+      //     },
+      //     body: JSON.stringify({  
+      //       image: base64,  
+      //     }),
+      //   }
+      // );
   
-      const result = await res.json();
-
-      // const result = {
-      //   '食物名称': '烤鸭',
-      //   '重量': '200g',
-      //   '卡路里': '500',
-      //   '蛋白质': '30',
-      //   '脂肪': '20',
-      //   '碳水化合物': '50',
-      // }
+      // const result = await res.json();
+  
+      // 模拟网络延迟 (实际使用API时可以删除这行)
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      // ✅ 顺序获取食物数据
+      const result = foodDatabase[currentFoodIndex];
+      
+      // ✅ 更新索引，如果到达末尾则从头开始
+      setCurrentFoodIndex((prevIndex) => (prevIndex + 1));
+      
       
       console.log('🍜 食物识别结果:', result);
       const mappedResult = [{
@@ -195,10 +227,12 @@ export default function DietScreen() {
       }];
 
       setResultData(mappedResult);
+      setIsRecognizing(false); // 重置识别状态
       setModalVisible(true);
 
     } catch (error) {
       console.error('❌ 拍照或识别失败:', error);
+      setIsRecognizing(false); // 重置识别状态
       setIsCameraVisible(false);
     // 显示友好的错误提示
       Alert.alert(
@@ -252,30 +286,55 @@ export default function DietScreen() {
   return (
     <View style={styles.container}>
       {/* 摄像头显示控制 */}
-      {isCameraVisible && (
-        <View style={styles.cameraContainer}>
-          <CameraView style={styles.camera} facing={facing} ref={cameraRef}>
-            {/* 切换镜头 */}
-            <TouchableOpacity style={styles.closeButton} onPress={toggleCameraFacing}>
-              <Ionicons name="camera-reverse" size={40} color="white" />
-            </TouchableOpacity>
+{isCameraVisible && (
+  <View style={styles.cameraContainer}>
+    <CameraView style={styles.camera} facing={facing} ref={cameraRef}>
+      {/* 切换镜头 */}
+      <TouchableOpacity style={styles.closeButton} onPress={toggleCameraFacing}>
+        <Ionicons name="camera-reverse" size={40} color="white" />
+      </TouchableOpacity>
 
-            {/* 返回 */}
-            <TouchableOpacity style={styles.backButton} onPress={toggleCameraVisibility}>
-              <Ionicons name="arrow-back" size={40} color="white" />
-            </TouchableOpacity>
-          </CameraView>
-          <TouchableOpacity style={styles.recognizeFood} onPress={detectFood}>
-            <LinearGradient
-              colors={['#2A86FF', '#3F99FF']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.addFoodGradient}
-            >
-              <Ionicons name="add" size={24} color="white" />
-              <Text style={styles.addFoodText}>识别食物</Text>
-            </LinearGradient>
-          </TouchableOpacity>
+      {/* 返回 */}
+      <TouchableOpacity style={styles.backButton} onPress={toggleCameraVisibility}>
+        <Ionicons name="arrow-back" size={40} color="white" />
+      </TouchableOpacity>
+    </CameraView>
+    
+    {/* 识别中的加载动画 */}
+    {isRecognizing && (
+      <View style={styles.loadingContainer}>
+        <View style={styles.loadingBox}>
+          <ActivityIndicator size="large" color="#2A86FF" />
+          <Text style={styles.loadingText}>正在识别食物...</Text>
+        </View>
+      </View>
+    )}
+    
+    {/* 识别按钮 - 在识别中时禁用 */}
+    <TouchableOpacity 
+      style={[
+        styles.recognizeFood,
+        isRecognizing && styles.disabledButton
+      ]} 
+      onPress={detectFood}
+      disabled={isRecognizing}
+    >
+      <LinearGradient
+        colors={isRecognizing ? ['#BBBBBB', '#DDDDDD'] : ['#2A86FF', '#3F99FF']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={styles.addFoodGradient}
+      >
+        {isRecognizing ? (
+          <Text style={styles.addFoodText}>识别中...</Text>
+        ) : (
+          <>
+            <Ionicons name="add" size={24} color="white" />
+            <Text style={styles.addFoodText}>识别食物</Text>
+          </>
+        )}
+      </LinearGradient>
+    </TouchableOpacity>
           <ResultModal
             visible={modalVisible}
             result={resultData}
@@ -340,6 +399,14 @@ export default function DietScreen() {
                 }));
                 setCurrentMealId(null); // 清除状态
               }
+              // ✅ 首先关闭模态框
+                setModalVisible(false);
+                // ✅ 然后使用 setTimeout 延时关闭相机
+                setTimeout(() => {
+                  setIsCameraVisible(false);
+                  // ✅ 清除结果数据，防止下次打开相机时显示
+                  setResultData([]);
+                }, 100);
             }}
           />
         </View>
@@ -530,6 +597,7 @@ export default function DietScreen() {
                     style={styles.mealAddButton}
                     onPress={() => {
                       setCurrentMealId(meal.id);   // ✅ 记录当前餐
+                      setResultData([]); // ✅ 清除之前的结果
                       setIsCameraVisible(true);    // ✅ 打开摄像头
                     }}
                   >
@@ -886,5 +954,37 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: 'white',
     marginLeft: 8,
+  },
+  loadingContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+  },
+  loadingBox: {
+    width: 200,
+    height: 100,
+    backgroundColor: 'white',
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#333',
+    fontWeight: '500',
+  },
+  disabledButton: {
+    opacity: 0.7,
   },
 });
