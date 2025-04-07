@@ -31,6 +31,8 @@ interface UserData {
   height: string;
   weight: string;
   bmi: string;
+  birthday?: string; // 可选字段
+  gender?: string;  // 可选字段
 }
 
 export default function ProfileScreen() {
@@ -57,7 +59,9 @@ export default function ProfileScreen() {
   const [editData, setEditData] = useState({
     name: '',
     height: '',
-    weight: ''
+    weight: '',
+    birthday: '',
+    gender: ''
   });
   const [updating, setUpdating] = useState(false);
   
@@ -132,15 +136,27 @@ const onRefresh = async () => {
 
 // 打开编辑模式
 const handleEdit = () => {
-  setEditData({
-    name: userData.name !== '用户' ? userData.name : '',
-    height: userData.height !== '--' ? userData.height : '',
-    weight: userData.weight !== '--' ? userData.weight : ''
+  // 从 AsyncStorage 获取最新的用户信息
+  AsyncStorage.getItem('user_info').then(userInfoString => {
+    if (userInfoString) {
+      const userInfo = JSON.parse(userInfoString);
+      
+      setEditData({
+        name: userInfo.name || '',
+        height: userInfo.height ? String(userInfo.height) : '',
+        weight: userInfo.current_weight ? String(userInfo.current_weight) : '',
+        birthday: userInfo.birthday || '',
+        gender: userInfo.gender || ''
+      });
+    }
+    
+    setIsEditing(true);
+  }).catch(error => {
+    console.error('获取用户信息失败:', error);
+    setIsEditing(true); // 即使失败也打开编辑窗口，但不预填数据
   });
-  setIsEditing(true);
 };
 
-// 保存编辑数据
 // 保存编辑数据
 const handleSaveEdit = async () => {
   try {
@@ -159,6 +175,20 @@ const handleSaveEdit = async () => {
       throw new Error('体重必须是有效的数字');
     }
     
+    // 验证生日格式
+    if (editData.birthday) {
+      const birthdayRegex = /^\d{4}-\d{2}-\d{2}$/;
+      if (!birthdayRegex.test(editData.birthday)) {
+        throw new Error('生日格式必须为 YYYY-MM-DD');
+      }
+      
+      // 额外检查日期是否有效
+      const birthdayDate = new Date(editData.birthday);
+      if (isNaN(birthdayDate.getTime())) {
+        throw new Error('请输入有效的日期');
+      }
+    }
+    
     // 获取当前用户信息
     const userInfoString = await AsyncStorage.getItem('user_info');
     const authToken = await AsyncStorage.getItem('auth_token');
@@ -173,7 +203,9 @@ const handleSaveEdit = async () => {
     const updateData = {
       name: editData.name || userInfo.name,
       height: height || userInfo.height,
-      current_weight: weight || userInfo.current_weight
+      current_weight: weight || userInfo.current_weight,
+      birthday: editData.birthday || userInfo.birthday,
+      gender: editData.gender || userInfo.gender
     };
     
     // 调用服务器API更新用户信息
@@ -232,7 +264,9 @@ const handleSaveEdit = async () => {
       name: editData.name || userData.name,
       height: height ? String(height) : userData.height,
       weight: weight ? String(weight) : userData.weight,
-      bmi: bmiValue
+      bmi: bmiValue,
+      birthday: editData.birthday || userInfo.birthday,
+      gender: editData.gender || userInfo.gender
     });
     
     // 关闭编辑模式
@@ -354,78 +388,130 @@ const handleSaveEdit = async () => {
     </TouchableOpacity>
   );
   // 编辑模态窗口
-  const renderEditModal = () => (
-    <Modal
-      animationType="slide"
-      transparent={true}
-      visible={isEditing}
-      onRequestClose={() => setIsEditing(false)}
-    >
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>编辑个人资料</Text>
-            
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>姓名</Text>
-              <TextInput
-                style={styles.textInput}
-                value={editData.name}
-                onChangeText={(text) => setEditData(prev => ({ ...prev, name: text }))}
-                placeholder="输入您的姓名"
-                placeholderTextColor="#999"
-              />
-            </View>
-            
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>身高 (cm)</Text>
-              <TextInput
-                style={styles.textInput}
-                value={editData.height}
-                onChangeText={(text) => setEditData(prev => ({ ...prev, height: text }))}
-                keyboardType="numeric"
-                placeholder="输入您的身高"
-                placeholderTextColor="#999"
-              />
-            </View>
-            
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>体重 (kg)</Text>
-              <TextInput
-                style={styles.textInput}
-                value={editData.weight}
-                onChangeText={(text) => setEditData(prev => ({ ...prev, weight: text }))}
-                keyboardType="numeric"
-                placeholder="输入您的体重"
-                placeholderTextColor="#999"
-              />
-            </View>
-            
-            <View style={styles.modalActions}>
+const renderEditModal = () => (
+  <Modal
+    animationType="slide"
+    transparent={true}
+    visible={isEditing}
+    onRequestClose={() => setIsEditing(false)}
+  >
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <Text style={styles.modalTitle}>编辑个人资料</Text>
+          
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>姓名</Text>
+            <TextInput
+              style={styles.textInput}
+              value={editData.name}
+              onChangeText={(text) => setEditData(prev => ({ ...prev, name: text }))}
+              placeholder="输入您的姓名"
+              placeholderTextColor="#999"
+            />
+          </View>
+          
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>生日 (YYYY-MM-DD)</Text>
+            <TextInput
+              style={styles.textInput}
+              value={editData.birthday}
+              onChangeText={(text) => setEditData(prev => ({ ...prev, birthday: text }))}
+              placeholder="例如：1990-01-01"
+              placeholderTextColor="#999"
+            />
+          </View>
+          
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>性别</Text>
+            <View style={styles.genderSelection}>
               <TouchableOpacity 
-                style={[styles.modalButton, styles.cancelButton]} 
-                onPress={() => setIsEditing(false)}
+                style={[
+                  styles.genderOption, 
+                  editData.gender === 'male' && styles.genderOptionSelected
+                ]} 
+                onPress={() => setEditData(prev => ({ ...prev, gender: 'male' }))}
               >
-                <Text style={styles.cancelButtonText}>取消</Text>
+                <Ionicons 
+                  name="male" 
+                  size={20} 
+                  color={editData.gender === 'male' ? "#ffffff" : "#666"} 
+                />
+                <Text style={[
+                  styles.genderText, 
+                  editData.gender === 'male' && styles.genderTextSelected
+                ]}>男</Text>
               </TouchableOpacity>
               
               <TouchableOpacity 
-                style={[styles.modalButton, styles.saveButton]}
-                onPress={handleSaveEdit}
-                disabled={updating}
+                style={[
+                  styles.genderOption, 
+                  editData.gender === 'female' && styles.genderOptionSelected
+                ]} 
+                onPress={() => setEditData(prev => ({ ...prev, gender: 'female' }))}
               >
-                {updating ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Text style={styles.saveButtonText}>保存</Text>
-                )}
+                <Ionicons 
+                  name="female" 
+                  size={20} 
+                  color={editData.gender === 'female' ? "#ffffff" : "#666"} 
+                />
+                <Text style={[
+                  styles.genderText, 
+                  editData.gender === 'female' && styles.genderTextSelected
+                ]}>女</Text>
               </TouchableOpacity>
             </View>
           </View>
+          
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>身高 (cm)</Text>
+            <TextInput
+              style={styles.textInput}
+              value={editData.height}
+              onChangeText={(text) => setEditData(prev => ({ ...prev, height: text }))}
+              keyboardType="numeric"
+              placeholder="输入您的身高"
+              placeholderTextColor="#999"
+            />
+          </View>
+          
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>体重 (kg)</Text>
+            <TextInput
+              style={styles.textInput}
+              value={editData.weight}
+              onChangeText={(text) => setEditData(prev => ({ ...prev, weight: text }))}
+              keyboardType="numeric"
+              placeholder="输入您的体重"
+              placeholderTextColor="#999"
+            />
+          </View>
+          
+          <View style={styles.modalActions}>
+            <TouchableOpacity 
+              style={[styles.modalButton, styles.cancelButton]} 
+              onPress={() => setIsEditing(false)}
+            >
+              <Text style={styles.cancelButtonText}>取消</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={[styles.modalButton, styles.saveButton]}
+              onPress={handleSaveEdit}
+              disabled={updating}
+            >
+              {updating ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.saveButtonText}>保存</Text>
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
-      </TouchableWithoutFeedback>
-    </Modal>
-  );
+      </View>
+    </TouchableWithoutFeedback>
+  </Modal>
+);
 
   // 如果正在加载数据显示加载指示器
   if (isLoading) {
@@ -519,6 +605,7 @@ const handleSaveEdit = async () => {
             </View>
           </View>
         </View>
+        
         
         {/* 功能菜单 */}
         <View style={styles.menuSection}>
@@ -900,5 +987,36 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: '500',
     fontSize: 16,
+  },
+  // 添加性别选择相关样式
+  genderSelection: {
+    flexDirection: 'row',
+    justifyContent: 'space-evenly',
+    marginTop: 5
+  },
+  genderOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    backgroundColor: '#f9f9f9',
+    marginHorizontal: 5,
+    flex: 1,
+    justifyContent: 'center'
+  },
+  genderOptionSelected: {
+    backgroundColor: '#2A86FF',
+    borderColor: '#2A86FF',
+  },
+  genderText: {
+    marginLeft: 8,
+    color: '#666',
+    fontSize: 16
+  },
+  genderTextSelected: {
+    color: 'white'
   },
 });
