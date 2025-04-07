@@ -7,6 +7,7 @@ import { CameraView, CameraType, useCameraPermissions, CameraCapturedPicture } f
 import * as FileSystem from 'expo-file-system';
 import ResultModal, { ResultModalProps } from '../components/ResultModal';
 import { useLocalSearchParams } from 'expo-router';
+import { fetchMealsByDate,createMeal,deleteMeal,addFoodToMeal,updateMeal,deleteFood } from '../api/meals';
 
 interface Food {
   id?: number; // 可选属性，表示食物的唯一标识符
@@ -26,33 +27,6 @@ interface Meal {
   completed: boolean;
   foods: Food[];
 }
-
-const initialMeals: Meal[] = [
-  {
-    id: 1,
-    type: '早餐',
-    time: '',
-    calories: 0,
-    completed: false,
-    foods: [] // 明确是 Food[] 类型的空数组
-  },
-  {
-    id: 2,
-    type: '午餐',
-    time: '',
-    calories: 0,
-    completed: false,
-    foods: []
-  },
-  {
-    id: 3,
-    type: '晚餐',
-    time: '',
-    calories: 0,
-    completed: false,
-    foods: []
-  }
-];
 
 const foodDatabase = [
   {
@@ -80,6 +54,8 @@ const foodDatabase = [
     "碳水化合物": "28"
   },
 ];
+
+
 const BAIDU_TOKEN_URL = 'https://aip.baidubce.com/oauth/2.0/token?client_id=RfDGbYIhxqmPZrRkW4UFHMDk&client_secret=RWgORkellxRcCKs0aBWSmszuxhoSxQiR&grant_type=client_credentials';
 export default function DietScreen() {
   const searchParams = useLocalSearchParams();
@@ -117,7 +93,21 @@ export default function DietScreen() {
   const [isRecognizing, setIsRecognizing] = useState(false);
   const [currentFoodIndex, setCurrentFoodIndex] = useState(0);
 
-  const [meals, setMeals] = useState(initialMeals);
+  const [meals, setMeals] = useState<Meal[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const [isManualDateChange, setIsManualDateChange] = useState(false);
+
+  // 当选中日期变化时加载对应数据
+  useEffect(() => {
+    if (!isManualDateChange) {
+      // 只有当不是手动改变日期时才加载
+      loadDataForDate(selectedDate);
+    }
+    // 重置标记
+    setIsManualDateChange(false);
+  }, [selectedDate]);
+
   // 添加日期范围相关状态
   const [currentWeekStart, setCurrentWeekStart] = useState(() => {
     const today = new Date();
@@ -132,6 +122,246 @@ export default function DietScreen() {
   // 日期选择器的滚动引用
   const dateScrollRef = useRef<ScrollView>(null);
   
+    const fetchMeals = async (date: Date) => {
+      try {
+        setIsLoading(true);
+        const mealsData = await fetchMealsByDate(date);
+  
+        // 添加数据字段映射，确保服务器返回的 total_calories 字段被正确映射到 calories 字段
+        const formattedMeals = mealsData?.map(meal => ({
+          id: meal.id,
+          type: meal.type,
+          time: meal.time || '',
+          calories: meal.total_calories || 0, // 这里进行字段映射
+          completed: meal.completed || false,
+          foods: meal.foods || []
+        })) || [];
+        
+        // 使用格式化后的数据
+        setMeals(formattedMeals);
+        
+        // 计算总营养数据
+        calculateNutritionTotals(formattedMeals);
+        
+      } catch (error) {
+        console.error('获取餐点数据失败:', error);
+        Alert.alert('数据获取失败', '无法从服务器获取餐点数据，请重试');
+        
+        setMeals([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+  // 添加创建新餐点的函数
+// 修改创建新餐点的函数
+const addNewMeal = async () => {
+  // 弹出输入框让用户选择餐点类型
+  Alert.prompt(
+    '添加新餐点',
+    '请输入餐点类型',
+    [
+      {
+        text: '取消',
+        onPress: () => {},
+        style: 'cancel',
+      },
+      {
+        text: '添加',
+        onPress: async (mealType) => {
+          if (!mealType || mealType.trim() === '') {
+            Alert.alert('错误', '餐点类型不能为空');
+            return;
+          }
+          
+          try {
+            setIsLoading(true);
+            
+            // 构建新餐点数据
+            const newMeal = {
+              type: mealType.trim(),
+              date: selectedDate.toISOString().split('T')[0],
+              time: '',
+              total_calories: 0,
+              completed: false,
+              foods: []
+            };
+            
+            // 调用API创建新餐点
+            const createdMeal = await createMeal(newMeal);
+            console.log('服务器返回的餐点数据:', createdMeal);
+            
+            // 更新本地状态
+            if (createdMeal) {
+              // 确保将字段正确映射到组件使用的格式
+              setMeals(prev => [...prev, {
+                id: createdMeal.id,
+                type: createdMeal.type, // 确保使用正确的字段名
+                time: createdMeal.time || '',
+                calories: createdMeal.total_calories || 0,
+                completed: createdMeal.completed || false,
+                foods: createdMeal.foods || []
+              }]);
+              
+              // 直接重新获取数据，确保数据一致
+              fetchMeals(selectedDate);
+              
+              Alert.alert('成功', `已添加"${mealType}"餐点`);
+            }
+          } catch (error) {
+            console.error('创建餐点失败:', error);
+            Alert.alert('错误', '创建餐点失败，请重试');
+          } finally {
+            setIsLoading(false);
+          }
+        }
+      }
+    ],
+    'plain-text'
+  );
+};
+  // 添加计算总营养数据的函数
+  const calculateNutritionTotals = (mealsData: Meal[]) => {
+    let totalCalories = 0;
+    let totalProtein = 0;
+    let totalCarbs = 0;
+    let totalFat = 0;
+    
+    mealsData.forEach(meal => {
+      meal.foods.forEach(food => {
+        totalCalories += food.calories;
+        totalProtein += food.protein || 0;
+        totalCarbs += food.carbs || 0;
+        totalFat += food.fat || 0;
+      });
+    });
+    
+    // 更新营养数据状态
+    setNutritionData({
+      calories: {
+        current: totalCalories,
+        goal: 2200
+      },
+      protein: {
+        current: totalProtein,
+        goal: 120
+      },
+      carbs: {
+        current: totalCarbs,
+        goal: 220
+      },
+      fats: {
+        current: totalFat,
+        goal: 73
+      }
+    });
+  };
+
+  // 修改 loadDataForDate 函数使用新的 fetchMeals 函数
+    const loadDataForDate = async (date: Date) => {
+      try {
+        setIsDateLoading(true);
+        
+        // 格式化日期为YYYY-MM-DD
+        const formattedDate = date.toISOString().split('T')[0];
+        console.log(`加载 ${formattedDate} 的数据`);
+        
+        // 对所有日期都从服务器获取数据，不再区分是否为当天
+        await fetchMeals(date);
+        
+      } catch (error) {
+        console.error('加载日期数据失败:', error);
+        Alert.alert('错误', '加载数据失败，请重试');
+      } finally {
+        setIsDateLoading(false);
+      }
+    };
+
+    // 添加删除餐点的函数
+  const handleDeleteMeal = (mealId: number, mealType: string) => {
+    // 显示确认对话框
+    Alert.alert(
+      "删除餐点",
+      `确定要删除"${mealType}"餐点及其所有食物记录吗？`,
+      [
+        {
+          text: "取消",
+          style: "cancel"
+        },
+        { 
+          text: "删除", 
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setIsLoading(true);
+              
+              // 调用API删除餐点
+              await deleteMeal(mealId);
+              
+              // 从本地状态中移除该餐点
+              const mealToRemove = meals.find(meal => meal.id === mealId);
+              if (mealToRemove) {
+                // 从总营养数据中减去将被删除餐点的营养值
+                let mealCalories = 0;
+                let mealProtein = 0;
+                let mealCarbs = 0;
+                let mealFat = 0;
+                
+                mealToRemove.foods.forEach(food => {
+                  mealCalories += food.calories;
+                  mealProtein += food.protein || 0;
+                  mealCarbs += food.carbs || 0;
+                  mealFat += food.fat || 0;
+                });
+                
+                // 更新总营养数据
+                setNutritionData(prev => ({
+                  calories: {
+                    ...prev.calories,
+                    current: Math.max(0, prev.calories.current - mealCalories),
+                  },
+                  protein: {
+                    ...prev.protein,
+                    current: Math.max(0, prev.protein.current - mealProtein),
+                  },
+                  carbs: {
+                    ...prev.carbs,
+                    current: Math.max(0, prev.carbs.current - mealCarbs),
+                  },
+                  fats: {
+                    ...prev.fats,
+                    current: Math.max(0, prev.fats.current - mealFat),
+                  },
+                }));
+                
+                // 更新餐点列表
+                setMeals(prev => prev.filter(meal => meal.id !== mealId));
+              }
+              
+              Alert.alert("成功", "餐点已成功删除");
+            } catch (error) {
+              console.error('删除餐点失败:', error);
+              Alert.alert("错误", "删除餐点失败，请重试");
+            } finally {
+              setIsLoading(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+
+  useEffect(() => {
+    if (!isManualDateChange) {
+      // 只有当不是手动改变日期时才加载
+      loadDataForDate(selectedDate);
+    } else {
+      // 重置标记
+      setIsManualDateChange(false);
+    }
+  }, [selectedDate]);
+
+
   // 获取日期数组用于日历显示 - 修改这个函数
   const getDates = () => {
     const dates = [];
@@ -147,283 +377,6 @@ export default function DietScreen() {
     return dates;
   };
 
-// 加载特定日期的数据
-const loadDataForDate = async (date: Date) => {
-  try {
-    setIsDateLoading(true);
-    
-    // 格式化日期为YYYY-MM-DD
-    const formattedDate = date.toISOString().split('T')[0];
-    console.log(`加载 ${formattedDate} 的数据`);
-    
-    // 模拟API延迟
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    // 如果是今天，直接使用当前数据或从API重新加载
-    if (date.toDateString() === new Date().toDateString()) {
-      // 使用当前数据，可以选择重新从API加载
-      console.log('加载今日数据');
-    } else {
-      // 对于非今天的日期，加载模拟数据
-      // 为了演示，根据日期生成不同的模拟数据
-      const dateValue = date.getDate();
-      
-      // 根据日期生成不同的数据
-      if (dateValue % 3 === 0) { // 每3天展示一个完整记录日
-        const mockMeals = [
-          {
-            id: 1,
-            type: '早餐',
-            time: '08:30',
-            calories: 350 + dateValue * 10,
-            completed: true,
-            foods: [
-              {
-                name: '全麦面包',
-                amount: '2片',
-                calories: 160,
-                protein: 6,
-                carbs: 30,
-                fat: 2
-              },
-              {
-                name: '牛奶',
-                amount: '250ml',
-                calories: 120,
-                protein: 8,
-                carbs: 12,
-                fat: 4
-              }
-            ]
-          },
-          {
-            id: 2,
-            type: '午餐',
-            time: '12:30',
-            calories: 520 + dateValue * 5,
-            completed: true,
-            foods: [
-              {
-                name: '糙米饭',
-                amount: '150g',
-                calories: 180,
-                protein: 4,
-                carbs: 40,
-                fat: 1
-              },
-              {
-                name: '清蒸鸡胸肉',
-                amount: '100g',
-                calories: 165,
-                protein: 31,
-                carbs: 0,
-                fat: 3.6
-              }
-            ]
-          },
-          {
-            id: 3,
-            type: '晚餐',
-            time: '18:45',
-            calories: 450 + dateValue * 8,
-            completed: true,
-            foods: [
-              {
-                name: '意面',
-                amount: '120g',
-                calories: 220,
-                protein: 8,
-                carbs: 42,
-                fat: 1.5
-              },
-              {
-                name: '番茄肉酱',
-                amount: '100g',
-                calories: 150,
-                protein: 10,
-                carbs: 10,
-                fat: 8
-              }
-            ]
-          }
-        ];
-
-        // 计算营养总值
-        let totalCalories = 0;
-        let totalProtein = 0;
-        let totalCarbs = 0;
-        let totalFat = 0;
-        
-        mockMeals.forEach(meal => {
-          meal.foods.forEach(food => {
-            totalCalories += food.calories;
-            totalProtein += food.protein;
-            totalCarbs += food.carbs;
-            totalFat += food.fat;
-          });
-        });
-        
-        // 更新状态
-        setMeals(mockMeals);
-        setNutritionData({
-          calories: {
-            current: totalCalories,
-            goal: 2200
-          },
-          protein: {
-            current: totalProtein,
-            goal: 120
-          },
-          carbs: {
-            current: totalCarbs,
-            goal: 220
-          },
-          fats: {
-            current: totalFat,
-            goal: 73
-          }
-        });
-        
-      } else if (dateValue % 3 === 1) { // 部分记录日
-        const mockMeals = [
-          {
-            id: 1,
-            type: '早餐',
-            time: '07:50',
-            calories: 300 + dateValue * 8,
-            completed: true,
-            foods: [
-              {
-                name: '燕麦粥',
-                amount: '200g',
-                calories: 180,
-                protein: 5,
-                carbs: 30,
-                fat: 3
-              }
-            ]
-          },
-          {
-            id: 2,
-            type: '午餐',
-            time: '',
-            calories: 0,
-            completed: false,
-            foods: []
-          },
-          {
-            id: 3,
-            type: '晚餐',
-            time: '19:10',
-            calories: 400 + dateValue * 6,
-            completed: true,
-            foods: [
-              {
-                name: '沙拉',
-                amount: '250g',
-                calories: 220,
-                protein: 8,
-                carbs: 15,
-                fat: 12
-              }
-            ]
-          }
-        ];
-        
-        // 计算营养总值
-        let totalCalories = 0;
-        let totalProtein = 0;
-        let totalCarbs = 0;
-        let totalFat = 0;
-        
-        mockMeals.forEach(meal => {
-          meal.foods.forEach(food => {
-            totalCalories += food.calories;
-            totalProtein += food.protein;
-            totalCarbs += food.carbs;
-            totalFat += food.fat;
-          });
-        });
-        
-        // 更新状态
-        setMeals(mockMeals);
-        setNutritionData({
-          calories: {
-            current: totalCalories,
-            goal: 2200
-          },
-          protein: {
-            current: totalProtein,
-            goal: 120
-          },
-          carbs: {
-            current: totalCarbs,
-            goal: 220
-          },
-          fats: {
-            current: totalFat,
-            goal: 73
-          }
-        });
-        
-      } else { // 未记录日
-        // 重置为空数据
-        setMeals([
-          {
-            id: 1,
-            type: '早餐',
-            time: '',
-            calories: 0,
-            completed: false,
-            foods: []
-          },
-          {
-            id: 2,
-            type: '午餐',
-            time: '',
-            calories: 0,
-            completed: false,
-            foods: []
-          },
-          {
-            id: 3,
-            type: '晚餐',
-            time: '',
-            calories: 0,
-            completed: false,
-            foods: []
-          }
-        ]);
-        
-        // 重置营养数据
-        setNutritionData({
-          calories: {
-            current: 0,
-            goal: 2200
-          },
-          protein: {
-            current: 0,
-            goal: 120
-          },
-          carbs: {
-            current: 0,
-            goal: 220
-          },
-          fats: {
-            current: 0,
-            goal: 73
-          }
-        });
-      }
-    }
-    
-  } catch (error) {
-    console.error('加载日期数据失败:', error);
-    Alert.alert('错误', '加载数据失败，请重试');
-  } finally {
-    setIsDateLoading(false);
-  }
-};
 
 // 切换到上一周或下一周
 const changeWeek = (direction: 'prev' | 'next') => {
@@ -467,59 +420,90 @@ const formatFullDate = (date: Date) => {
   return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日 ${['周日','周一','周二','周三','周四','周五','周六'][date.getDay()]}`;
 };
 
-  const deleteFood = (mealId: number, foodIndex: number) => {
-    // 查找要删除的食物
-    const mealToUpdate = meals.find(meal => meal.id === mealId);
-    if (!mealToUpdate || foodIndex >= mealToUpdate.foods.length) return;
+
+  // 添加删除食物函数
+// 修改 handleDeleteFood 函数
+
+const handleDeleteFood = async (mealId: number, foodIndex: number) => {
+  try {
+    const meal = meals.find(m => m.id === mealId);
+    if (!meal) {
+      Alert.alert('错误', `找不到ID为${mealId}的餐点`);
+      return;
+    }
     
-    const foodToDelete = mealToUpdate.foods[foodIndex];
+    const food = meal.foods[foodIndex];
+    if (!food) {
+      Alert.alert('错误', '找不到要删除的食物');
+      return;
+    }
     
-    // 更新餐点数据，删除特定食品
+    if (!food.id) {
+      Alert.alert('错误', '无法删除该食物，食物ID不存在');
+      return;
+    }
+    
+    setIsLoading(true);
+    
+    // 调用API删除食物 - 记录日志帮助调试
+    console.log('删除食物:', food.id);
+    await deleteFood(food.id);
+    
+    // 计算新的餐点卡路里
+    const foodCalories = typeof food.calories === 'number' ? food.calories : 0;
+    const mealCalories = typeof meal.calories === 'number' ? meal.calories : 0;
+    const newCalories = Math.max(0, mealCalories - foodCalories);
+    console.log('餐点卡路里:', mealCalories, '食物卡路里:', foodCalories, '删除后卡路里:', newCalories);
+    
+    // 更新餐点的总卡路里
+    await updateMeal(mealId, {
+      total_calories: newCalories,
+    });
+    
+    // 更新本地状态
     setMeals(prev => 
-      prev.map(meal => {
-        if (meal.id === mealId) {
-          // 计算新的卡路里总量
-          const newCalories = meal.calories - foodToDelete.calories;
-          
-          // 过滤掉要删除的食品
-          const newFoods = meal.foods.filter((_, idx) => idx !== foodIndex);
-          
-          // 如果删除后没有食品，标记为未完成
-          const isCompleted = newFoods.length > 0;
-          
-          return {
-            ...meal,
-            completed: isCompleted,
+      prev.map(m => {
+        if (m.id === mealId) {
+          const updatedMeal = {
+            ...m,
             calories: newCalories,
-            foods: newFoods,
-            // 如果删除后没有食物，重置时间
-            time: newFoods.length > 0 ? meal.time : ''
+            foods: m.foods.filter((_, index) => index !== foodIndex)
           };
+          console.log('更新后的餐点数据:', updatedMeal);
+          return updatedMeal;
         }
-        return meal;
+        return m;
       })
     );
     
-    // 更新营养摄入数据，直接使用食物的详细营养素数据
+    // 更新总营养数据
     setNutritionData(prev => ({
       calories: {
         ...prev.calories,
-        current: prev.calories.current - foodToDelete.calories,
+        current: Math.max(0, prev.calories.current - foodCalories),
       },
       protein: {
         ...prev.protein,
-        current: prev.protein.current - foodToDelete.protein,
+        current: Math.max(0, prev.protein.current - (food.protein || 0)),
       },
       carbs: {
         ...prev.carbs,
-        current: prev.carbs.current - foodToDelete.carbs,
+        current: Math.max(0, prev.carbs.current - (food.carbs || 0)),
       },
       fats: {
         ...prev.fats,
-        current: prev.fats.current - foodToDelete.fat,
+        current: Math.max(0, prev.fats.current - (food.fat || 0)),
       },
     }));
-  };
+    
+    Alert.alert('成功', '已删除该食物');
+  } catch (error) {
+    console.error('删除食物失败:', error);
+  } finally {
+    setIsLoading(false);
+  }
+};
+
   useEffect(() => {
     const fetchToken = async () => {
       try {
@@ -727,83 +711,117 @@ const formatFullDate = (date: Date) => {
         )}
       </LinearGradient>
     </TouchableOpacity>
-          <ResultModal
-            visible={modalVisible}
-            result={resultData}
-            onClose={() => setModalVisible(false)}
-            onConfirm={({ name, weight, energy }) => {
-              console.log('📥 用户确认记录:', name, weight, energy);
-              setModalVisible(false);
-              setIsCameraVisible(false); // ✅ 关闭相机
-            
-              if (currentMealId !== null ) {
-                // 获取当前时间
-                const now = new Date();
-                const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-                
-                // 从结果中获取营养数据
-                const selectedFood = resultData[0]; // 假设只有一个结果
-                
-                // 计算实际的营养值（可以根据重量进行调整）
-                const calorieValue = Math.round(selectedFood.calorie);
-                const proteinValue = Math.round(selectedFood.protein);
-                const fatValue = Math.round(selectedFood.fat);
-                const carbsValue = Math.round(selectedFood.carbs);
-                
-                const newFood = {
-                  name,
-                  amount: `${weight}g`,
-                  calories: calorieValue,
-                  protein: proteinValue,
-                  fat: fatValue,
-                  carbs: carbsValue,
-                };
-            
-                // ✅ 更新 meals 数组
-                setMeals(prev =>
-                  prev.map(meal =>
-                    meal.id === currentMealId
-                      ? {
+    <ResultModal
+        visible={modalVisible}
+        result={resultData}
+        onClose={() => setModalVisible(false)}
+        // 在 ResultModal 的 onConfirm 回调中修改
+
+        onConfirm={async ({ name, weight, energy }) => {
+          console.log('📥 用户确认记录:', name, weight, energy);
+          
+          try {
+            if (currentMealId !== null) {
+              setIsLoading(true);
+              
+              // 获取当前时间
+              const now = new Date();
+              const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+              
+              // 从结果中获取营养数据
+              const selectedFood = resultData[0];
+              
+              // 计算实际的营养值
+              const calorieValue = Math.round(selectedFood.calorie);
+              const proteinValue = Math.round(selectedFood.protein);
+              const fatValue = Math.round(selectedFood.fat);
+              const carbsValue = Math.round(selectedFood.carbs);
+              
+              // 构建食物数据
+              const newFood = {
+                name,
+                amount: `${weight}g`,
+                calories: calorieValue,
+                protein: proteinValue,
+                fat: fatValue,
+                carbs: carbsValue,
+              };
+              
+              // 找到当前餐点
+              const currentMeal = meals.find(meal => meal.id === currentMealId);
+              if (currentMeal) {
+                try {
+                  // 添加食物 - 服务器可能会自动更新餐点的总卡路里
+                  console.log('添加食物到餐点:', currentMealId, newFood);
+                  const addedFood = await addFoodToMeal(currentMealId, newFood);
+                  console.log('服务器返回的添加食物结果:', addedFood);
+                  await updateMeal(currentMealId, {
+                    time: currentTime,
+                    completed: true,
+                    total_calories: currentMeal.calories + calorieValue
+                  });
+                  // 不要重新获取所有数据，而是通过本地更新确保不会重复计算
+                  setMeals(prev => {
+                    return prev.map(meal => {
+                      if (meal.id === currentMealId) {
+                        // 创建更新后的餐点对象
+                        const updatedMeal = {
                           ...meal,
-                          time: currentTime, // ✅ 更新时间为当前时间
+                          time: meal.time || currentTime,
                           completed: true,
-                          calories: meal.calories + newFood.calories,
-                          foods: [...meal.foods, newFood],
-                        }
-                      : meal
-                  )
-                );
-                // ✅ 更新总营养数据
-                setNutritionData(prev => ({
-                  calories: {
-                    ...prev.calories,
-                    current: prev.calories.current + calorieValue,
-                  },
-                  protein: {
-                    ...prev.protein,
-                    current: prev.protein.current + proteinValue,
-                  },
-                  carbs: {
-                    ...prev.carbs,
-                    current: prev.carbs.current + carbsValue,
-                  },
-                  fats: {
-                    ...prev.fats,
-                    current: prev.fats.current + fatValue,
-                  },
-                }));
-                setCurrentMealId(null); // 清除状态
+                          calories: meal.calories + calorieValue, // 这里只加一次卡路里
+                          foods: [...meal.foods, {
+                            ...newFood,
+                            id: addedFood.id
+                          }]
+                        };
+                        console.log('更新后的餐点数据:', updatedMeal);
+                        return updatedMeal;
+                      }
+                      return meal;
+                    });
+                  });
+                  
+                  // 更新总营养数据
+                  setNutritionData(prev => ({
+                    calories: {
+                      ...prev.calories,
+                      current: prev.calories.current + calorieValue,
+                    },
+                    protein: {
+                      ...prev.protein,
+                      current: prev.protein.current + proteinValue,
+                    },
+                    carbs: {
+                      ...prev.carbs,
+                      current: prev.carbs.current + carbsValue,
+                    },
+                    fats: {
+                      ...prev.fats,
+                      current: prev.fats.current + fatValue,
+                    },
+                  }));
+                  
+                  // 显示成功提示
+                  Alert.alert('成功', `已将"${name}"添加到餐点中`);
+                } catch (error) {
+                  console.error('添加食物失败:', error);
+                  throw error;
+                }
+              } else {
+                throw new Error(`找不到ID为${currentMealId}的餐点`);
               }
-              // ✅ 首先关闭模态框
-                setModalVisible(false);
-                // ✅ 然后使用 setTimeout 延时关闭相机
-                setTimeout(() => {
-                  setIsCameraVisible(false);
-                  // ✅ 清除结果数据，防止下次打开相机时显示
-                  setResultData([]);
-                }, 100);
-            }}
-          />
+            }
+          } catch (error) {
+            console.error('添加食物失败:', error);
+          } finally {
+            setIsLoading(false);
+            setModalVisible(false);
+            setIsCameraVisible(false);
+            setResultData([]);
+          }
+        }}
+      />
         </View>
       )}
 
@@ -843,27 +861,34 @@ const formatFullDate = (date: Date) => {
               
               return (
                 <TouchableOpacity 
-                  key={index}
-                  style={[
-                    styles.dateItem,
-                    isSelected && styles.selectedDateItem
-                  ]}
-                  onPress={() => setSelectedDate(date)}
-                >
-                  <Text style={[
-                    styles.dateDay,
-                    isSelected && styles.selectedDateText
-                  ]}>
-                    {date.getDate()}
-                  </Text>
-                  <Text style={[
-                    styles.dateWeekday,
-                    isSelected && styles.selectedDateText
-                  ]}>
-                    {formatDayName(date)}
-                  </Text>
-                  {isToday && <View style={styles.todayDot} />}
-                </TouchableOpacity>
+                    key={index}
+                    style={[
+                      styles.dateItem,
+                      isSelected && styles.selectedDateItem
+                    ]}
+                    onPress={() => {
+                      setIsManualDateChange(true); // 设置标记
+                      setSelectedDate(date);
+                      
+                      // 直接调用 fetchMeals 从服务器获取最新数据
+                      
+                      fetchMeals(date);
+                    }}
+                  >
+                    <Text style={[
+                      styles.dateDay,
+                      isSelected && styles.selectedDateText
+                    ]}>
+                      {date.getDate()}
+                    </Text>
+                    <Text style={[
+                      styles.dateWeekday,
+                      isSelected && styles.selectedDateText
+                    ]}>
+                      {formatDayName(date)}
+                    </Text>
+                    {isToday && <View style={styles.todayDot} />}
+                  </TouchableOpacity>
               );
             })}
           </ScrollView>
@@ -975,93 +1000,121 @@ const formatFullDate = (date: Date) => {
         </View>
         
         {/* 膳食列表 */}
-        <View style={styles.mealListContainer}>
-          <Text style={styles.sectionTitle}>今日膳食</Text>
-          
-          {meals.map((meal) => (
-            <View key={meal.id} style={styles.mealCard}>
-              <View style={styles.mealHeader}>
-                <View style={styles.mealTypeContainer}>
-                  <View style={[
-                    styles.mealTypeIcon, 
-                    meal.completed ? styles.mealCompleted : {}
-                  ]}>
-                    {meal.completed ? (
-                      <Ionicons name="checkmark" size={16} color="white" />
-                    ) : (
-                      <Ionicons name="time-outline" size={16} color="#2A86FF" />
-                    )}
-                  </View>
-                  <View>
-                        <Text style={styles.mealType}>{meal.type}</Text>
-                        {meal.time ? (
-                          <Text style={styles.mealTime}>{meal.time}</Text>
-                        ) : (
-                          <Text style={styles.mealTimeEmpty}>未记录时间</Text>
-                        )}
-                      </View>
-                </View>
-                <View style={styles.mealCalories}>
-                  <Text style={styles.mealCaloriesText}>{meal.calories} 千卡</Text>
-                </View>
+<View style={styles.mealListContainer}>
+  <View style={styles.sectionHeader}>
+    <Text style={styles.sectionTitle}>今日膳食</Text>
+    <TouchableOpacity 
+      style={styles.addMealButton}
+      onPress={addNewMeal}
+    >
+      <Ionicons name="add-circle" size={24} color="#2A86FF" />
+      <Text style={styles.addMealText}>添加餐点</Text>
+    </TouchableOpacity>
+  </View>
+
+  {/* 餐点列表 - 修复嵌套循环问题 */}
+  {meals.length > 0 ? (
+    meals.map((meal) => (
+      <View key={meal.id} style={styles.mealCard}>
+        <View style={styles.mealHeader}>
+            <View style={styles.mealTypeContainer}>
+              <View style={[
+                styles.mealTypeIcon, 
+                meal.completed ? styles.mealCompleted : {}
+              ]}>
+                {meal.completed ? (
+                  <Ionicons name="checkmark" size={16} color="white" />
+                ) : (
+                  <Ionicons name="time-outline" size={16} color="#2A86FF" />
+                )}
               </View>
-              
-              <View style={styles.mealFoods}>
-                {meal.foods.map((food, index) => (
-                  <View key={index} style={styles.foodItem}>
-                    <View style={styles.foodInfo}>
-                      <Text style={styles.foodName}>{food.name}</Text>
-                      <Text style={styles.foodAmount}>{food.amount}</Text>
-                    </View>
-                    <View style={styles.foodRightContainer}>
-                      <Text style={styles.foodCalories}>{food.calories} 千卡</Text>
-                      <TouchableOpacity 
-                        style={styles.deleteButton}
-                        onPress={() => {
-                          Alert.alert(
-                            "删除食品",
-                            `确定要删除"${food.name}"吗？`,
-                            [
-                              {
-                                text: "取消",
-                                style: "cancel"
-                              },
-                              { 
-                                text: "删除", 
-                                onPress: () => deleteFood(meal.id, index),
-                                style: "destructive"
-                              }
-                            ]
-                          );
-                        }}
-                      >
-                        <Ionicons name="trash-outline" size={16} color="#FF6B6B" />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                ))}
+              <View>
+                <Text style={styles.mealType}>{meal.type}</Text>
+                {meal.time ? (
+                  <Text style={styles.mealTime}>{meal.time}</Text>
+                ) : (
+                  <Text style={styles.mealTimeEmpty}>未记录时间</Text>
+                )}
               </View>
+            </View>
+            
+            <View style={styles.mealHeaderRight}>
+              {/* 添加删除餐点按钮 */}
+              <TouchableOpacity 
+                style={styles.deleteMealButton}
+                onPress={() => handleDeleteMeal(meal.id, meal.type)}
+              >
+                <Ionicons name="trash-outline" size={18} color="#FF6B6B" />
+              </TouchableOpacity>
               
-              <View style={styles.mealActions}>
-                <TouchableOpacity
-                    style={styles.mealAddButton}
+              <View style={styles.mealCalories}>
+                <Text style={styles.mealCaloriesText}>{meal.calories} 千卡</Text>
+              </View>
+            </View>
+          </View>
+        
+        <View style={styles.mealFoods}>
+          {meal.foods.map((food, index) => (
+            <View key={`${meal.id}-food-${index}`} style={styles.foodItem}>
+              <View style={styles.foodInfo}>
+                <Text style={styles.foodName}>{food.name}</Text>
+                <Text style={styles.foodAmount}>{food.amount}</Text>
+              </View>
+              <View style={styles.foodRightContainer}>
+                <Text style={styles.foodCalories}>{food.calories} 千卡</Text>
+                <TouchableOpacity 
+                    style={styles.deleteButton}
                     onPress={() => {
-                      setCurrentMealId(meal.id);   // ✅ 记录当前餐
-                      setResultData([]); // ✅ 清除之前的结果
-                      setIsCameraVisible(true);    // ✅ 打开摄像头
+                      Alert.alert(
+                        "删除食品",
+                        `确定要删除"${food.name}"吗？`,
+                        [
+                          {
+                            text: "取消",
+                            style: "cancel"
+                          },
+                          { 
+                            text: "删除", 
+                            onPress: () => handleDeleteFood(meal.id, index),
+                            style: "destructive"
+                          }
+                        ]
+                      );
                     }}
                   >
-                    <Ionicons name="add" size={16} color="white" />
-                    <Text style={styles.mealAddButtonText}>记录此餐</Text>
-                </TouchableOpacity>
+                    <Ionicons name="trash-outline" size={16} color="#FF6B6B" />
+                  </TouchableOpacity>
               </View>
             </View>
           ))}
         </View>
+        
+        <View style={styles.mealActions}>
+          <TouchableOpacity
+            style={styles.mealAddButton}
+            onPress={() => {
+              setCurrentMealId(meal.id);
+              setResultData([]);
+              setIsCameraVisible(true);
+            }}
+          >
+            <Ionicons name="add" size={16} color="white" />
+            <Text style={styles.mealAddButtonText}>记录此餐</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    ))
+  ) : (
+    <View style={styles.emptyMealsContainer}>
+      <Ionicons name="restaurant-outline" size={60} color="#CCCCCC" />
+      <Text style={styles.emptyMealsText}>当日暂无餐点记录</Text>
+      <Text style={styles.emptyMealsSubText}>点击"添加餐点"开始记录当日膳食</Text>
+    </View>
+  )}
+</View>
         </>
         )}
       </ScrollView>
-      
     </View>
   );
 }
@@ -1469,5 +1522,67 @@ const styles = StyleSheet.create({
     padding: 32,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  // 添加新样式
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingHorizontal: 4,
+  },
+  addMealButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(42, 134, 255, 0.1)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  addMealText: {
+    fontSize: 14,
+    color: '#2A86FF',
+    marginLeft: 4,
+    fontWeight: '500',
+  },
+  emptyMealsContainer: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+    ...Platform.select({
+      web: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+      },
+      default: {
+        elevation: 2,
+      }
+    }),
+  },
+  emptyMealsText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#666666',
+    marginTop: 16,
+  },
+  emptyMealsSubText: {
+    fontSize: 14,
+    color: '#999999',
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  // 添加新样式
+  mealHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  deleteMealButton: {
+    padding: 8,
+    marginRight: 8,
   },
 });

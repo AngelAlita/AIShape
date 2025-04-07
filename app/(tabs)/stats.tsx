@@ -1,15 +1,21 @@
-import React, { useState, ComponentProps } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Platform } from 'react-native';
+import React, { useState, ComponentProps, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Platform, ActivityIndicator, TextInput, Alert, Modal } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
+
+// 导入健康计算相关API
+import { calculateBMI, getBMIStatus, calculateIdealWeightRange, calculateBMR, calculateTDEE, estimateBodyFat } from '../api/healthCalculator';
+import { updateWeightGoal, fetchCurrentUser } from '../api/user';
+import { LineChart, BarChart } from 'react-native-chart-kit';
 
 // 注意：这里需要安装图表库
 // npm install react-native-chart-kit
 // npm install react-native-svg
-// 这里只展示UI设计，实际图表需要导入图表库组件
-// import { LineChart, BarChart } from 'react-native-chart-kit';
+
+
 
 const screenWidth = Dimensions.get('window').width;
 
@@ -17,31 +23,221 @@ const screenWidth = Dimensions.get('window').width;
 type IconProps = ComponentProps<typeof MaterialCommunityIcons>;
 type IconName = IconProps['name'];
 
+// 添加用户数据类型定义
+interface UserHealthData {
+  currentWeight: number;
+  initialWeight: number;
+  weightChange: number;
+  weightGoal: number;
+  bmi: number;
+  bmiStatus: string;
+  bodyFatPercentage: number;
+  waterPercentage: number;
+  muscleMass: number;
+  lastWorkout: string;
+  workoutsThisWeek: number;
+  caloriesBurnedToday: number;
+  caloriesBurnedWeek: number;
+  dailyStepsAverage: number;
+  activeMinutesWeek: number;
+  sleepAverage: number;
+  restingHeartRate: number;
+  tdee: number;
+  bmr: number;
+}
+
 export default function StatsScreen() {
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState('week'); // 'week', 'month', 'year'
   const [selectedMetric, setSelectedMetric] = useState('weight'); // 'weight', 'calories', 'steps', 'workout'
+  const [isLoading, setIsLoading] = useState(true);
+  const [userId, setUserId] = useState<number | null>(null);
   
-  // 模拟用户健康数据
-  const userData = {
-    currentWeight: 68.5,
-    initialWeight: 72.8,
-    weightChange: -4.3,
-    weightGoal: 65,
-    bmi: 22.1,
-    bodyFatPercentage: 18.4,
-    waterPercentage: 56.2,
-    muscleMass: 44.7,
-    lastWorkout: '今天',
-    workoutsThisWeek: 4,
-    caloriesBurnedToday: 485,
-    caloriesBurnedWeek: 2320,
-    dailyStepsAverage: 8240,
-    activeMinutesWeek: 360,
-    sleepAverage: 7.2, // 小时
-    restingHeartRate: 64,
+  // 添加状态变量来控制目标体重修改模态框
+  const [showWeightGoalModal, setShowWeightGoalModal] = useState(false);
+  const [newWeightGoal, setNewWeightGoal] = useState('');
+  
+  // 使用useState初始化用户健康数据
+  const [userData, setUserData] = useState<UserHealthData>({
+    currentWeight: 0,
+    initialWeight: 0,
+    weightChange: 0,
+    weightGoal: 0,
+    bmi: 0,
+    bmiStatus: '',
+    bodyFatPercentage: 0,
+    waterPercentage: 0,
+    muscleMass: 0,
+    lastWorkout: '--',
+    workoutsThisWeek: 0,
+    caloriesBurnedToday: 0,
+    caloriesBurnedWeek: 0,
+    dailyStepsAverage: 0,
+    activeMinutesWeek: 0,
+    sleepAverage: 0,
+    restingHeartRate: 0,
+    tdee: 0,
+    bmr: 0
+  });
+  // 加载用户ID
+  useEffect(() => {
+    const loadUserId = async () => {
+      try {
+        const userIdString = await AsyncStorage.getItem('user_id');
+        if (userIdString) {
+          const parsedId = parseInt(userIdString);
+          console.log('加载到用户ID:', parsedId);
+          setUserId(parsedId);
+        } else {
+          console.log('AsyncStorage中没有找到user_id');
+          // 尝试从user_info中获取用户ID
+          const userInfoString = await AsyncStorage.getItem('user_info');
+          if (userInfoString) {
+            const userInfo = JSON.parse(userInfoString);
+            if (userInfo.id) {
+              console.log('从user_info中获取到用户ID:', userInfo.id);
+              setUserId(userInfo.id);
+              // 保存id到user_id键中以便未来使用
+              await AsyncStorage.setItem('user_id', userInfo.id.toString());
+            }
+          }
+        }
+      } catch (error) {
+        console.error('获取用户ID失败:', error);
+      }
+    };
+    
+    loadUserId();
+  }, []);
+  
+  // 保存目标体重
+  const saveWeightGoal = async () => {
+    if (!userId) {
+      Alert.alert('错误', '用户未登录');
+      return;
+    }
+    
+    try {
+      // 验证输入
+      const weightGoalValue = parseFloat(newWeightGoal);
+      if (isNaN(weightGoalValue) || weightGoalValue <= 0) {
+        Alert.alert('输入错误', '请输入有效的目标体重');
+        return;
+      }
+      
+      setIsLoading(true);
+      
+      // 调用API更新目标体重
+      await updateWeightGoal(userId, weightGoalValue);
+      
+      // 更新本地用户数据
+      setUserData(prevData => ({
+        ...prevData,
+        weightGoal: weightGoalValue
+      }));
+      
+      // 更新AsyncStorage中的用户信息
+      const userInfoString = await AsyncStorage.getItem('user_info');
+      if (userInfoString) {
+        const userInfo = JSON.parse(userInfoString);
+        userInfo.weight_goal = weightGoalValue;
+        await AsyncStorage.setItem('user_info', JSON.stringify(userInfo));
+      }
+      
+      // 关闭模态框
+      setShowWeightGoalModal(false);
+      Alert.alert('成功', '目标体重已更新');
+      
+    } catch (error) {
+      console.error('保存目标体重失败:', error);
+      Alert.alert('错误', '无法更新目标体重，请稍后再试');
+    } finally {
+      setIsLoading(false);
+    }
   };
-  
+  // 加载用户数据和计算健康指标
+  useEffect(() => {
+    const loadUserHealthData = async () => {
+      try {
+        setIsLoading(true);
+        
+        // 从AsyncStorage获取用户信息
+        const userInfoString = await AsyncStorage.getItem('user_info');
+        if (!userInfoString) {
+          console.log('用户数据不存在');
+          setIsLoading(false);
+          return;
+        }
+        
+        const userInfo = JSON.parse(userInfoString);
+        console.log('获取到的用户信息:', userInfo);
+        
+        // 获取必要参数
+        const height = userInfo.height || 170;  // 厘米
+        const currentWeight = userInfo.current_weight || 70;  // 公斤
+        const initialWeight = userInfo.initial_weight || currentWeight + 3;  // 如果没有初始重量，假设比当前重量多3kg
+        const weightGoal = userInfo.weight_goal || currentWeight - 5;  // 如果没有目标重量，假设比当前重量少5kg
+        
+        // 计算年龄
+        let age = 18;  // 默认年龄
+        if (userInfo.birthday) {
+          const birthDate = new Date(userInfo.birthday);
+          const today = new Date();
+          age = today.getFullYear() - birthDate.getFullYear();
+          
+          // 调整年龄，考虑生日是否已过
+          const m = today.getMonth() - birthDate.getMonth();
+          if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+            age--;
+          }
+        }
+        
+        // 性别
+        const gender = userInfo.gender || 'male';
+        
+        // 使用健康计算API
+        const bmi = calculateBMI(height, currentWeight);
+        const bmiStatus = getBMIStatus(bmi);
+        const idealWeightRange = calculateIdealWeightRange(height);
+        const bmr = calculateBMR(height, currentWeight, age, gender);
+        const tdee = calculateTDEE(bmr, 1.4); // 假设轻度活动水平
+        const bodyFatPercentage = estimateBodyFat(height, currentWeight, null, gender);
+        
+        // 估算肌肉量 (简单估算，实际应有更准确的公式)
+        const muscleMass = currentWeight * (gender === 'male' ? 0.4 : 0.35);
+        
+        // 设置用户健康数据
+        setUserData({
+          currentWeight,
+          initialWeight,
+          weightChange: currentWeight - initialWeight,
+          weightGoal,
+          bmi,
+          bmiStatus,
+          bodyFatPercentage,
+          waterPercentage: gender === 'male' ? 60 : 55,  // 估算值
+          muscleMass: parseFloat(muscleMass.toFixed(1)),
+          lastWorkout: '今天', // 这个数据需要从训练记录获取
+          workoutsThisWeek: 4,  // 这个数据需要从训练记录获取
+          caloriesBurnedToday: Math.round(tdee / 3),  // 估算值
+          caloriesBurnedWeek: Math.round(tdee * 5),  // 估算值
+          dailyStepsAverage: Math.round(tdee / 40),  // 估算值
+          activeMinutesWeek: 360,  // 默认值
+          sleepAverage: 7.2,  // 默认值
+          restingHeartRate: 65,  // 默认值
+          tdee,
+          bmr
+        });
+      } catch (error) {
+        console.error('加载健康数据失败:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    loadUserHealthData();
+  }, []);
+
   // 模拟图表数据 - 实际使用时请替换为图表组件
   const weightChartData = {
     labels: ["3/17", "3/18", "3/19", "3/20", "3/21", "3/22", "今天"],
@@ -151,6 +347,15 @@ export default function StatsScreen() {
     },
   ];
   
+if (isLoading) {
+    return (
+      <View style={[styles.container, styles.loadingContainer]}>
+        <ActivityIndicator size="large" color="#2A86FF" />
+        <Text style={{marginTop: 16, color: '#666'}}>加载健康数据中...</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <LinearGradient
@@ -188,16 +393,27 @@ export default function StatsScreen() {
           </View>
           
           <View style={styles.weightGoalContainer}>
-            <Text style={styles.weightGoalText}>
-              距离目标体重还有 <Text style={styles.weightGoalValue}>{(userData.currentWeight - userData.weightGoal).toFixed(1)}</Text> kg
-            </Text>
+            <View style={styles.weightGoalHeader}>
+              <Text style={styles.weightGoalText}>
+                距离目标体重还有 <Text style={styles.weightGoalValue}>{Math.abs(userData.currentWeight - userData.weightGoal).toFixed(1)}</Text> kg
+              </Text>
+              <TouchableOpacity 
+                style={styles.editWeightGoalButton}
+                onPress={() => {
+                  setNewWeightGoal(userData.weightGoal.toString());
+                  setShowWeightGoalModal(true);
+                }}
+              >
+                <Ionicons name="pencil" size={16} color="#2A86FF" />
+              </TouchableOpacity>
+            </View>
             <View style={styles.weightProgressContainer}>
               <View style={styles.weightProgressBg}>
                 <View 
                   style={[
                     styles.weightProgress,
                     { 
-                      width: `${Math.min(100, ((userData.initialWeight - userData.currentWeight) / (userData.initialWeight - userData.weightGoal)) * 100)}%` 
+                      width: `${Math.min(100, Math.max(0, ((userData.initialWeight - userData.currentWeight) / (userData.initialWeight - userData.weightGoal)) * 100))}%` 
                     }
                   ]}
                 />
@@ -515,6 +731,54 @@ export default function StatsScreen() {
         {/* 底部间隙 */}
         <View style={{ height: 20 }} />
       </ScrollView>
+
+      <Modal
+        visible={showWeightGoalModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowWeightGoalModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalTitle}>设置目标体重</Text>
+            
+            <View style={styles.inputContainer}>
+              <TextInput
+                style={styles.weightInput}
+                keyboardType="numeric"
+                value={newWeightGoal}
+                onChangeText={setNewWeightGoal}
+                placeholder="请输入目标体重 (kg)"
+                placeholderTextColor="#999"
+              />
+              <Text style={styles.inputUnit}>kg</Text>
+            </View>
+            
+            <Text style={styles.modalInfo}>
+              设置合理的目标体重是实现健康减重的重要步骤。
+              {'\n\n'}
+              建议按照每周减重0.5-1kg的健康节奏设定目标。
+            </Text>
+            
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={() => setShowWeightGoalModal(false)}
+              >
+                <Text style={styles.cancelButtonText}>取消</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[styles.modalButton, styles.saveButton]}
+                onPress={saveWeightGoal}
+              >
+                <Text style={styles.saveButtonText}>保存</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
     </View>
   );
 }
@@ -988,4 +1252,107 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#333',
   },
+  // 在样式表中添加
+  loadingContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  bmiStatusText: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 4,
+  },
+  // 权重目标相关样式
+  weightGoalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  editWeightGoalButton: {
+    padding: 4,
+  },
+  
+  // 模态框相关样式
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContainer: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 20,
+    width: '85%',
+    maxWidth: 400,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#DDD',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    marginBottom: 20,
+  },
+  weightInput: {
+    flex: 1,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: '#333',
+  },
+  inputUnit: {
+    fontSize: 16,
+    color: '#666',
+  },
+  modalInfo: {
+    fontSize: 13,
+    color: '#666',
+    lineHeight: 18,
+    marginBottom: 20,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    margin: 4,
+  },
+  cancelButton: {
+    backgroundColor: '#F0F0F0',
+  },
+  saveButton: {
+    backgroundColor: '#2A86FF',
+  },
+  cancelButtonText: {
+    color: '#666',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  saveButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  
 });
