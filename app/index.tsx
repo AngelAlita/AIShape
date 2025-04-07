@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { View, ActivityIndicator } from 'react-native';
 
 export default function Index() {
+
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
@@ -11,14 +12,15 @@ export default function Index() {
     // 检查用户是否已登录
     AsyncStorage.getItem('auth_token')
       .then(token => {
-        setIsAuthenticated(!!token);
+        setIsAuthenticated(!token);
         setIsLoading(false);
       })
-      .catch(() => {
+      .catch(error => {
         setIsAuthenticated(false);
         setIsLoading(false);
       });
   }, []);
+
 
   // 加载状态
   if (isLoading) {
@@ -28,11 +30,12 @@ export default function Index() {
       </View>
     );
   }
-
+  
   // 根据登录状态重定向
+  console.log('用户登录状态:', isAuthenticated); // 添加日志，查看用户登录状态
   if (isAuthenticated) {
     return <Redirect href="/(tabs)" />;
   } else {
-    return <Redirect href="./auth" />;
+    return <Redirect href="/auth" />;
   }
 }

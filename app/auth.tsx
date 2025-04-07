@@ -153,64 +153,144 @@ export default function AuthScreen() {
   };
   
   // 提交登录
-  const handleLogin = async () => {
-    if (!validateLoginForm()) return;
-    
-    setLoading(true);
-    
-    // 这里应该是实际的登录API调用
-    try {
-      // 模拟API请求
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      // 假设服务器返回的令牌
-      const authToken = "example_auth_token_12345";
-        
-      // 存储令牌
-      await AsyncStorage.setItem('auth_token', authToken);
+// 修改 handleLogin 函数
 
-      // 登录成功后跳转到主页
-      router.replace('/(tabs)');
-    } catch (error) {
-      // 处理登录错误
-      setErrors(prev => ({
-        ...prev,
-        login: { 
-          ...prev.login, 
-          password: '用户名或密码错误' 
-        }
-      }));
-    } finally {
-      setLoading(false);
+const handleLogin = async () => {
+  if (!validateLoginForm()) return;
+  
+  setLoading(true);
+  
+  try {
+    console.log('开始登录请求...');
+    // 调用实际的登录API
+    const response = await fetch('http://1.94.60.194:5000/api/auth/login', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        username: loginForm.username,
+        password: loginForm.password
+      }),
+    });
+
+    console.log('登录响应状态:', response.status);
+    
+    // 解析响应
+    let data;
+    try {
+      const responseText = await response.text();
+      console.log('登录响应内容:', responseText);
+      data = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error('解析响应失败:', parseError);
+      throw new Error('服务器响应格式错误');
     }
-  };
+    
+    if (!response.ok) {
+      throw new Error(data.message || '登录失败');
+    }
+
+    console.log('登录成功, 获取到 token:', data.token);
+    
+    // 存储服务器返回的令牌
+    await AsyncStorage.setItem('auth_token', data.token);
+    
+    // 可以选择保存用户信息
+    if (data.user) {
+      await AsyncStorage.setItem('user_info', JSON.stringify(data.user));
+    }
+
+    // 登录成功后跳转到主页
+    router.replace('/(tabs)');
+  } catch (error) {
+    console.error('登录错误:', error);
+    
+    // 处理登录错误
+    const errorMessage = error instanceof Error 
+      ? error.message 
+      : '登录失败，请稍后再试';
+    
+    setErrors(prev => ({
+      ...prev,
+      login: { 
+        ...prev.login, 
+        password: errorMessage 
+      }
+    }));
+    
+    // 显示错误信息
+    alert(`登录失败: ${errorMessage}`);
+  } finally {
+    setLoading(false);
+  }
+};
   
   // 提交注册
-  const handleRegister = async () => {
-    if (!validateRegisterForm()) return;
+  // 提交注册
+const handleRegister = async () => {
+  if (!validateRegisterForm()) return;
+  
+  setLoading(true);
+  
+  // 调用注册API
+  try {
+    const response = await fetch('http://1.94.60.194:5000/api/register', {
+      method: 'POST',
+      credentials: 'omit',  // 不发送 cookies
+      mode: 'cors',         // 明确使用 CORS 模式
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        username: registerForm.username,
+        email: registerForm.email,
+        name: registerForm.username, // 使用用户名作为名字
+        password: registerForm.password
+      }),
+    });
+
+    const data = await response.json();
     
-    setLoading(true);
-    
-    // 这里应该是实际的注册API调用
-    try {
-      // 模拟API请求
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      // 注册成功后自动登录并跳转到主页
-      router.replace('/(tabs)');
-    } catch (error) {
-      // 处理注册错误
-      setErrors(prev => ({
-        ...prev,
-        register: { 
-          ...prev.register, 
-          email: '该邮箱已被注册' 
-        }
-      }));
-    } finally {
-      setLoading(false);
+    if (!response.ok) {
+      throw new Error(data.message || '注册失败');
     }
-  };
+
+    // 注册成功，显示提示并自动切换到登录表单
+    alert('注册成功，请登录');
+    
+    // 清空注册表单
+    setRegisterForm({
+      username: '',
+      email: '',
+      password: '',
+      confirmPassword: ''
+    });
+    
+    // 预填充登录表单中的用户名
+    setLoginForm(prev => ({
+      ...prev,
+      username: registerForm.username
+    }));
+    
+    // 切换到登录表单
+    toggleForm(true);
+    
+  } catch (error) {
+    // 处理注册错误
+    const errorMessage = error instanceof Error ? error.message : '注册失败，请稍后再试';
+    
+    setErrors(prev => ({
+      ...prev,
+      register: { 
+        ...prev.register, 
+        email: errorMessage
+      }
+    }));
+  } finally {
+    setLoading(false);
+  }
+};
   
   // 切换登录/注册表单
   const toggleForm = (toLogin:boolean) => {

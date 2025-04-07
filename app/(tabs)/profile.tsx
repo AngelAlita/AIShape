@@ -31,47 +31,62 @@ export default function ProfileScreen() {
     }
   
         // 处理退出登录
-  const handleLogout = async () => {
-    // 显示确认对话框
-    Alert.alert(
-      "退出登录",
-      "确定要退出登录吗？",
-      [
-        {
-          text: "取消",
-          style: "cancel"
-        },
-        {
-          text: "确定",
-          onPress: async () => {
-            try {
-              setLoggingOut(true);
-              
-              // 如果有后端退出API，可以调用
-              try {
-                // 可选：调用后端登出API
-                // await authApi.logout();
-              } catch (apiError) {
-                // 即使API调用失败，仍然继续本地登出流程
-                console.warn("后端登出API调用失败", apiError);
-              }
-              
-              // 清除本地存储的令牌
-              await AsyncStorage.removeItem('auth_token');
-              
-              // 跳转到登录页面
-              router.replace('../auth');
-            } catch (error) {
-              console.error('退出登录失败:', error);
-              Alert.alert("错误", "退出登录时发生错误，请重试");
-            } finally {
-              setLoggingOut(false);
-            }
-          }
-        }
-      ]
-    );
-  };
+  // 处理退出登录
+const handleLogout = async () => {
+  // 显示确认对话框，使用条件检查以区分平台
+  const confirmLogout = Platform.OS === 'web' 
+    ? window.confirm("确定要退出登录吗？") 
+    : await new Promise((resolve) => {
+        Alert.alert(
+          "退出登录",
+          "确定要退出登录吗？",
+          [
+            { text: "取消", style: "cancel", onPress: () => resolve(false) },
+            { text: "确定", onPress: () => resolve(true) }
+          ]
+        );
+      });
+  
+  if (confirmLogout) {
+    try {
+      setLoggingOut(true);
+      
+      // 如果有后端退出API，可以调用
+      try {
+        // 可选：调用后端登出API
+        // await authApi.logout();
+      } catch (apiError) {
+        // 即使API调用失败，仍然继续本地登出流程
+        console.warn("后端登出API调用失败", apiError);
+      }
+      
+      // 清除本地存储的令牌
+      await AsyncStorage.removeItem('auth_token');
+      
+      // 清除可能存储的用户信息
+      await AsyncStorage.removeItem('user_info');
+      
+      // 根据平台选择适当的导航方式
+      if (Platform.OS === 'web') {
+        // 在浏览器中，使用全局导航
+        window.location.href = '/auth';
+      } else {
+        // 在移动应用中，使用 expo-router
+        router.replace('/auth');
+      }
+    } catch (error) {
+      console.error('退出登录失败:', error);
+      
+      if (Platform.OS === 'web') {
+        window.alert("退出登录时发生错误，请重试");
+      } else {
+        Alert.alert("错误", "退出登录时发生错误，请重试");
+      }
+    } finally {
+      setLoggingOut(false);
+    }
+  }
+};
 
   // 菜单项组件
   // 菜单项组件

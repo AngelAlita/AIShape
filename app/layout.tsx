@@ -1,6 +1,7 @@
 import { Slot, Redirect } from 'expo-router';
 import { useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { View, ActivityIndicator } from 'react-native';
 
 export default function RootLayout() {
   const [isLoading, setIsLoading] = useState(true);
@@ -21,12 +22,16 @@ export default function RootLayout() {
 
   // 加载状态
   if (isLoading) {
-    return null; // 或者显示一个加载指示器
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color="#2A86FF" />
+      </View>
+    ); 
   }
 
   // 如果用户未登录，重定向到登录页面
   if (!isAuthenticated) {
-    return <Redirect href="./auth" />;
+    return <Redirect href="/auth" />;
   }
 
   // 已登录用户显示正常的应用界面
