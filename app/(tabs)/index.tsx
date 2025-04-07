@@ -4,12 +4,37 @@ import { Ionicons, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-ico
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Alert } from 'react-native';
+import React, { ReactNode, useState, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const currentDate = "2024年2月6日";
-  const userName = "小明";
+  
+  // 获取当前日期并格式化
+  const today = new Date();
+  const currentDate = today.getFullYear() + '年' + (today.getMonth() + 1) + '月' + today.getDate() + '日';
+  
+  // 用户名状态
+  const [userName, setUserName] = useState("用户");
+  
+  // 在组件加载时获取用户信息
+  useEffect(() => {
+    const loadUserInfo = async () => {
+      try {
+        const userInfoString = await AsyncStorage.getItem('user_info');
+        if (userInfoString) {
+          const userInfo = JSON.parse(userInfoString);
+          // 优先使用 name，如果没有则使用 username
+          setUserName(userInfo.name || userInfo.username || "用户");
+        }
+      } catch (error) {
+        console.error('加载用户信息失败:', error);
+      }
+    };
+    
+    loadUserInfo();
+  }, []);
   // 添加跳转到个人页面的函数
   const navigateToProfile = () => {
     router.push('/profile');

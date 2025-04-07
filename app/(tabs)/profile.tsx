@@ -1,92 +1,341 @@
-import React, { ReactNode, useState } from 'react';
-import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, Platform, Alert, ActivityIndicator } from 'react-native';
+import React, { ReactNode, useState, useEffect } from 'react';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  Image, 
+  ScrollView, 
+  TouchableOpacity, 
+  Platform, 
+  Alert, 
+  ActivityIndicator,
+  Modal,
+  TextInput,
+  Keyboard,
+  TouchableWithoutFeedback 
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
-import authApi from '../auth'; // 假设你已经创建了这个API服务
+import { RefreshControl } from 'react-native';
+
+// 用户数据接口
+interface UserData {
+  name: string;
+  level: string;
+  joinDays: number;
+  completedWorkouts: number;
+  achievements: number;
+  height: string;
+  weight: string;
+  bmi: string;
+}
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const [loggingOut, setLoggingOut] = useState(false);
-
-  // 模拟用户数据
-  const user = {
-    name: "小明",
+  const [refreshing, setRefreshing] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  
+  // 用户数据状态
+  const [userData, setUserData] = useState<UserData>({
+    name: "用户",
     level: "健身新手",
-    joinDays: 45,
-    completedWorkouts: 23,
-    achievements: 7
-  };
+    joinDays: 0,
+    completedWorkouts: 0,
+    achievements: 0,
+    height: '--',
+    weight: '--',
+    bmi: '--'
+  });
   
-    // 添加类型定义
+   // 编辑相关状态
+  const [isEditing, setIsEditing] = useState(false);
+  const [editData, setEditData] = useState({
+    name: '',
+    height: '',
+    weight: ''
+  });
+  const [updating, setUpdating] = useState(false);
+  
+  // 添加类型定义
   interface MenuItemProps {
-      icon: ReactNode;
-      title: string;
-      rightText?: string;
-      color?: string;
-      onPress?: () => void;
-    }
-  
-        // 处理退出登录
-  // 处理退出登录
-const handleLogout = async () => {
-  // 显示确认对话框，使用条件检查以区分平台
-  const confirmLogout = Platform.OS === 'web' 
-    ? window.confirm("确定要退出登录吗？") 
-    : await new Promise((resolve) => {
-        Alert.alert(
-          "退出登录",
-          "确定要退出登录吗？",
-          [
-            { text: "取消", style: "cancel", onPress: () => resolve(false) },
-            { text: "确定", onPress: () => resolve(true) }
-          ]
-        );
+    icon: ReactNode;
+    title: string;
+    rightText?: string;
+    color?: string;
+    onPress?: () => void;
+  }
+// 加载用户数据
+const loadUserData = async () => {
+  try {
+    setIsLoading(true);
+    
+    const userInfoString = await AsyncStorage.getItem('user_info');
+    if (userInfoString) {
+      const userInfo = JSON.parse(userInfoString);
+      
+      // 计算 BMI
+      let bmiValue = '--';
+      if (userInfo.height && userInfo.current_weight) {
+        const heightInMeters = userInfo.height / 100;
+        const bmi = userInfo.current_weight / (heightInMeters * heightInMeters);
+        bmiValue = bmi.toFixed(1);
+      }
+      // 计算加入天数
+      let joinDays = 0;
+      if (userInfo.created_at) {
+        const createdDate = new Date(userInfo.created_at);
+        const currentDate = new Date();
+        
+        // 计算日期差
+        const diffTime = Math.abs(currentDate.getTime() - createdDate.getTime());
+        joinDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      }
+
+      /// 更新用户数据
+      setUserData({
+        name: userInfo.name || userInfo.username || "用户",
+        level: userInfo.level || "健身新手",
+        joinDays: joinDays || 0, // 使用计算出的真实加入天数
+        completedWorkouts: userInfo.completedWorkouts || 0,
+        achievements: userInfo.achievements || 0,
+        height: userInfo.height ? String(userInfo.height) : '--',
+        weight: userInfo.current_weight ? String(userInfo.current_weight) : '--',
+        bmi: bmiValue
       });
-  
-  if (confirmLogout) {
-    try {
-      setLoggingOut(true);
-      
-      // 如果有后端退出API，可以调用
-      try {
-        // 可选：调用后端登出API
-        // await authApi.logout();
-      } catch (apiError) {
-        // 即使API调用失败，仍然继续本地登出流程
-        console.warn("后端登出API调用失败", apiError);
-      }
-      
-      // 清除本地存储的令牌
-      await AsyncStorage.removeItem('auth_token');
-      
-      // 清除可能存储的用户信息
-      await AsyncStorage.removeItem('user_info');
-      
-      // 根据平台选择适当的导航方式
-      if (Platform.OS === 'web') {
-        // 在浏览器中，使用全局导航
-        window.location.href = '/auth';
-      } else {
-        // 在移动应用中，使用 expo-router
-        router.replace('/auth');
-      }
-    } catch (error) {
-      console.error('退出登录失败:', error);
-      
-      if (Platform.OS === 'web') {
-        window.alert("退出登录时发生错误，请重试");
-      } else {
-        Alert.alert("错误", "退出登录时发生错误，请重试");
-      }
-    } finally {
-      setLoggingOut(false);
+    } else {
+      // 没有用户数据时保留默认数据
+      console.log('未找到用户数据');
     }
+  } catch (error) {
+    console.error('加载用户数据失败:', error);
+  } finally {
+    setIsLoading(false);
   }
 };
+
+// 初始加载
+useEffect(() => {
+  loadUserData();
+}, []);
+
+// 刷新数据
+const onRefresh = async () => {
+  setRefreshing(true);
+  await loadUserData();
+  setRefreshing(false);
+};
+
+// 打开编辑模式
+const handleEdit = () => {
+  setEditData({
+    name: userData.name !== '用户' ? userData.name : '',
+    height: userData.height !== '--' ? userData.height : '',
+    weight: userData.weight !== '--' ? userData.weight : ''
+  });
+  setIsEditing(true);
+};
+
+// 保存编辑数据
+// 保存编辑数据
+const handleSaveEdit = async () => {
+  try {
+    setUpdating(true);
+    
+    // 解析输入值
+    const height = editData.height ? parseFloat(editData.height) : null;
+    const weight = editData.weight ? parseFloat(editData.weight) : null;
+    
+    // 验证输入
+    if (editData.height && isNaN(height!)) {
+      throw new Error('身高必须是有效的数字');
+    }
+    
+    if (editData.weight && isNaN(weight!)) {
+      throw new Error('体重必须是有效的数字');
+    }
+    
+    // 获取当前用户信息
+    const userInfoString = await AsyncStorage.getItem('user_info');
+    const authToken = await AsyncStorage.getItem('auth_token');
+    
+    if (!userInfoString || !authToken) {
+      throw new Error('找不到用户信息或认证令牌');
+    }
+    
+    const userInfo = JSON.parse(userInfoString);
+    
+    // 准备要发送到服务器的数据
+    const updateData = {
+      name: editData.name || userInfo.name,
+      height: height || userInfo.height,
+      current_weight: weight || userInfo.current_weight
+    };
+    
+    // 调用服务器API更新用户信息
+    console.log('准备更新用户数据:', updateData);
+    
+    const response = await fetch(`http://1.94.60.194:5000/api/users/${userInfo.id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`
+      },
+      body: JSON.stringify(updateData)
+    });
+    
+    // 检查响应状态
+    console.log('服务器响应状态:', response.status);
+    
+    if (!response.ok) {
+      // 尝试获取错误消息
+      let errorMessage;
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.message || `服务器错误 (${response.status})`;
+      } catch (e) {
+        errorMessage = `服务器错误 (${response.status})`;
+      }
+      throw new Error(errorMessage);
+    }
+    
+    // 解析服务器响应
+    const responseData = await response.json();
+    console.log('服务器返回的用户数据:', responseData);
+    
+    // 计算 BMI
+    let bmiValue = userData.bmi;
+    if (height && weight) {
+      const heightInMeters = height / 100;
+      const bmi = weight / (heightInMeters * heightInMeters);
+      bmiValue = bmi.toFixed(1);
+    }
+    
+    // 更新本地存储的用户信息
+    const updatedUserInfo = {
+      ...userInfo,
+      ...updateData,
+      // 如果服务器返回了更新后的完整用户数据，可以使用服务器数据
+      ...(responseData.user || {})
+    };
+    
+    // 保存到本地存储
+    await AsyncStorage.setItem('user_info', JSON.stringify(updatedUserInfo));
+    
+    // 更新 UI 显示
+    setUserData({
+      ...userData,
+      name: editData.name || userData.name,
+      height: height ? String(height) : userData.height,
+      weight: weight ? String(weight) : userData.weight,
+      bmi: bmiValue
+    });
+    
+    // 关闭编辑模式
+    setIsEditing(false);
+    
+    // 提示成功
+    if (Platform.OS === 'web') {
+      window.alert('个人资料已更新');
+    } else {
+      Alert.alert('成功', '个人资料已更新');
+    }
+    
+  } catch (error) {
+    console.error('保存用户数据失败:', error);
+    
+    const errorMessage = error instanceof Error ? error.message : '更新失败，请重试';
+    
+    if (Platform.OS === 'web') {
+      window.alert(`更新失败: ${errorMessage}`);
+    } else {
+      Alert.alert('错误', errorMessage);
+    }
+  } finally {
+    setUpdating(false);
+  }
+};
+
+  // 处理退出登录
+  const handleLogout = async () => {
+    // 显示确认对话框，使用条件检查以区分平台
+    const confirmLogout = Platform.OS === 'web' 
+      ? window.confirm("确定要退出登录吗？") 
+      : await new Promise((resolve) => {
+          Alert.alert(
+            "退出登录",
+            "确定要退出登录吗？",
+            [
+              { text: "取消", style: "cancel", onPress: () => resolve(false) },
+              { text: "确定", onPress: () => resolve(true) }
+            ]
+          );
+        });
+    
+    if (confirmLogout) {
+      try {
+        setLoggingOut(true);
+        
+        // 获取认证令牌
+        const authToken = await AsyncStorage.getItem('auth_token');
+        
+        // 调用后端登出API
+        if (authToken) {
+          try {
+            const response = await fetch('http://1.94.60.194:5000/api/auth/logout', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${authToken}`
+              }
+            });
+            
+            // 记录API响应结果
+            console.log('退出登录API响应状态:', response.status);
+            
+            // 即使登出API不成功，我们仍然要继续清除本地存储
+            if (!response.ok) {
+              console.warn('退出登录API返回非成功状态码:', response.status);
+            }
+          } catch (apiError) {
+            // 即使API调用失败，仍然继续本地登出流程
+            console.warn("调用退出登录API时出错:", apiError);
+          }
+        } else {
+          console.log('未找到认证令牌，仅执行本地登出');
+        }
+        
+        // 清除本地存储的令牌
+        await AsyncStorage.removeItem('auth_token');
+        
+        // 清除可能存储的用户信息
+        await AsyncStorage.removeItem('user_info');
+        
+        // 根据平台选择适当的导航方式
+        if (Platform.OS === 'web') {
+          // 在浏览器中，使用全局导航
+          window.location.href = '/auth';
+        } else {
+          // 在移动应用中，使用 expo-router
+          router.replace('/auth');
+        }
+      } catch (error) {
+        console.error('退出登录失败:', error);
+        
+        if (Platform.OS === 'web') {
+          window.alert("退出登录时发生错误，请重试");
+        } else {
+          Alert.alert("错误", "退出登录时发生错误，请重试");
+        }
+      } finally {
+        setLoggingOut(false);
+      }
+    }
+  };
 
   // 菜单项组件
   // 菜单项组件
@@ -104,12 +353,103 @@ const handleLogout = async () => {
       </View>
     </TouchableOpacity>
   );
-  
+  // 编辑模态窗口
+  const renderEditModal = () => (
+    <Modal
+      animationType="slide"
+      transparent={true}
+      visible={isEditing}
+      onRequestClose={() => setIsEditing(false)}
+    >
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>编辑个人资料</Text>
+            
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>姓名</Text>
+              <TextInput
+                style={styles.textInput}
+                value={editData.name}
+                onChangeText={(text) => setEditData(prev => ({ ...prev, name: text }))}
+                placeholder="输入您的姓名"
+                placeholderTextColor="#999"
+              />
+            </View>
+            
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>身高 (cm)</Text>
+              <TextInput
+                style={styles.textInput}
+                value={editData.height}
+                onChangeText={(text) => setEditData(prev => ({ ...prev, height: text }))}
+                keyboardType="numeric"
+                placeholder="输入您的身高"
+                placeholderTextColor="#999"
+              />
+            </View>
+            
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>体重 (kg)</Text>
+              <TextInput
+                style={styles.textInput}
+                value={editData.weight}
+                onChangeText={(text) => setEditData(prev => ({ ...prev, weight: text }))}
+                keyboardType="numeric"
+                placeholder="输入您的体重"
+                placeholderTextColor="#999"
+              />
+            </View>
+            
+            <View style={styles.modalActions}>
+              <TouchableOpacity 
+                style={[styles.modalButton, styles.cancelButton]} 
+                onPress={() => setIsEditing(false)}
+              >
+                <Text style={styles.cancelButtonText}>取消</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.modalButton, styles.saveButton]}
+                onPress={handleSaveEdit}
+                disabled={updating}
+              >
+                {updating ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.saveButtonText}>保存</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </TouchableWithoutFeedback>
+    </Modal>
+  );
+
+  // 如果正在加载数据显示加载指示器
+  if (isLoading) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#2A86FF" />
+        <Text style={{ marginTop: 16, color: '#666' }}>正在加载用户数据...</Text>
+      </View>
+    );
+  }
   return (
     <View style={styles.container}>
+      {renderEditModal()}
       <ScrollView 
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={['#2A86FF']}
+            tintColor="#2A86FF"
+          />
+        }
       >
         {/* 个人信息头部 */}
         <LinearGradient
@@ -121,31 +461,31 @@ const handleLogout = async () => {
           <View style={styles.userInfoContainer}>
             <View style={styles.avatarContainer}>
               <View style={styles.avatar}>
-                <Text style={styles.avatarText}>{user.name.charAt(0)}</Text>
+                <Text style={styles.avatarText}>{userData.name.charAt(0)}</Text>
               </View>
             </View>
             
             <View style={styles.userInfo}>
-              <Text style={styles.userName}>{user.name}</Text>
+              <Text style={styles.userName}>{userData.name}</Text>
               <View style={styles.levelBadge}>
-                <Text style={styles.levelText}>{user.level}</Text>
+                <Text style={styles.levelText}>{userData.level}</Text>
               </View>
             </View>
           </View>
           
           <View style={styles.statsContainer}>
             <View style={styles.statItem}>
-              <Text style={styles.statValue}>{user.joinDays}</Text>
+              <Text style={styles.statValue}>{userData.joinDays}</Text>
               <Text style={styles.statLabel}>坚持天数</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
-              <Text style={styles.statValue}>{user.completedWorkouts}</Text>
+              <Text style={styles.statValue}>{userData.completedWorkouts}</Text>
               <Text style={styles.statLabel}>完成训练</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
-              <Text style={styles.statValue}>{user.achievements}</Text>
+              <Text style={styles.statValue}>{userData.achievements}</Text>
               <Text style={styles.statLabel}>获得成就</Text>
             </View>
           </View>
@@ -155,7 +495,7 @@ const handleLogout = async () => {
         <View style={styles.bodyCard}>
           <View style={styles.bodyCardHeader}>
             <Text style={styles.cardTitle}>身体数据</Text>
-            <TouchableOpacity>
+            <TouchableOpacity onPress={handleEdit}>
               <Text style={styles.editButton}>编辑</Text>
             </TouchableOpacity>
           </View>
@@ -163,15 +503,19 @@ const handleLogout = async () => {
           <View style={styles.bodyDataRow}>
             <View style={styles.bodyDataItem}>
               <Text style={styles.dataLabel}>身高</Text>
-              <Text style={styles.dataValue}>175<Text style={styles.dataUnit}>cm</Text></Text>
+              <Text style={styles.dataValue}>
+                {userData.height}<Text style={styles.dataUnit}>{userData.height !== '--' ? 'cm' : ''}</Text>
+              </Text>
             </View>
             <View style={styles.bodyDataItem}>
               <Text style={styles.dataLabel}>体重</Text>
-              <Text style={styles.dataValue}>68<Text style={styles.dataUnit}>kg</Text></Text>
+              <Text style={styles.dataValue}>
+                {userData.weight}<Text style={styles.dataUnit}>{userData.weight !== '--' ? 'kg' : ''}</Text>
+              </Text>
             </View>
             <View style={styles.bodyDataItem}>
               <Text style={styles.dataLabel}>BMI</Text>
-              <Text style={styles.dataValue}>22.2</Text>
+              <Text style={styles.dataValue}>{userData.bmi}</Text>
             </View>
           </View>
         </View>
@@ -184,6 +528,7 @@ const handleLogout = async () => {
             <MenuItem 
               icon={<FontAwesome5 name="user-alt" size={16} color="#2A86FF" />}
               title="个人资料"
+              onPress={handleEdit}
             />
             <MenuItem 
               icon={<Ionicons name="fitness" size={18} color="#FF6B6B" />}
@@ -198,7 +543,7 @@ const handleLogout = async () => {
             <MenuItem 
               icon={<Ionicons name="trophy-outline" size={18} color="#4CD97B" />}
               title="我的成就"
-              rightText={`${user.achievements}项成就`}
+              rightText={`${userData.achievements}项成就`}
               color="#4CD97B"
             />
           </View>
@@ -475,5 +820,85 @@ const styles = StyleSheet.create({
     color: '#999',
     fontSize: 12,
     marginTop: 10,
+  },
+  // 模态窗口样式
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 20,
+    width: '100%',
+    maxWidth: 400,
+    ...Platform.select({
+      web: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 3.84,
+      },
+      default: {
+        elevation: 5,
+      }
+    }),
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 20,
+    color: '#333',
+    textAlign: 'center',
+  },
+  inputGroup: {
+    marginBottom: 16,
+  },
+  inputLabel: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 8,
+  },
+  textInput: {
+    borderWidth: 1,
+    borderColor: '#DDD',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
+    backgroundColor: '#F9F9F9',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 20,
+  },
+  modalButton: {
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: 5,
+  },
+  cancelButton: {
+    backgroundColor: '#F5F5F5',
+  },
+  cancelButtonText: {
+    color: '#666',
+    fontWeight: '500',
+    fontSize: 16,
+  },
+  saveButton: {
+    backgroundColor: '#2A86FF',
+  },
+  saveButtonText: {
+    color: 'white',
+    fontWeight: '500',
+    fontSize: 16,
   },
 });
