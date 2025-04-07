@@ -9,6 +9,7 @@ import ResultModal, { ResultModalProps } from '../components/ResultModal';
 import { useLocalSearchParams } from 'expo-router';
 
 interface Food {
+  id?: number; // 可选属性，表示食物的唯一标识符
   name: string;
   amount: string;
   calories: number;
@@ -117,6 +118,354 @@ export default function DietScreen() {
   const [currentFoodIndex, setCurrentFoodIndex] = useState(0);
 
   const [meals, setMeals] = useState(initialMeals);
+  // 添加日期范围相关状态
+  const [currentWeekStart, setCurrentWeekStart] = useState(() => {
+    const today = new Date();
+    // 获取本周的起始日期（周日）
+    const day = today.getDay(); // 0是周日，6是周六
+    const diff = today.getDate() - day;
+    return new Date(today.setDate(diff));
+  });
+  // 添加日期数据加载状态
+  const [isDateLoading, setIsDateLoading] = useState(false);
+  
+  // 日期选择器的滚动引用
+  const dateScrollRef = useRef<ScrollView>(null);
+  
+  // 获取日期数组用于日历显示 - 修改这个函数
+  const getDates = () => {
+    const dates = [];
+    const startDate = new Date(currentWeekStart);
+    
+    // 一周7天
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(startDate);
+      date.setDate(startDate.getDate() + i);
+      dates.push(date);
+    }
+    
+    return dates;
+  };
+
+// 加载特定日期的数据
+const loadDataForDate = async (date: Date) => {
+  try {
+    setIsDateLoading(true);
+    
+    // 格式化日期为YYYY-MM-DD
+    const formattedDate = date.toISOString().split('T')[0];
+    console.log(`加载 ${formattedDate} 的数据`);
+    
+    // 模拟API延迟
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    // 如果是今天，直接使用当前数据或从API重新加载
+    if (date.toDateString() === new Date().toDateString()) {
+      // 使用当前数据，可以选择重新从API加载
+      console.log('加载今日数据');
+    } else {
+      // 对于非今天的日期，加载模拟数据
+      // 为了演示，根据日期生成不同的模拟数据
+      const dateValue = date.getDate();
+      
+      // 根据日期生成不同的数据
+      if (dateValue % 3 === 0) { // 每3天展示一个完整记录日
+        const mockMeals = [
+          {
+            id: 1,
+            type: '早餐',
+            time: '08:30',
+            calories: 350 + dateValue * 10,
+            completed: true,
+            foods: [
+              {
+                name: '全麦面包',
+                amount: '2片',
+                calories: 160,
+                protein: 6,
+                carbs: 30,
+                fat: 2
+              },
+              {
+                name: '牛奶',
+                amount: '250ml',
+                calories: 120,
+                protein: 8,
+                carbs: 12,
+                fat: 4
+              }
+            ]
+          },
+          {
+            id: 2,
+            type: '午餐',
+            time: '12:30',
+            calories: 520 + dateValue * 5,
+            completed: true,
+            foods: [
+              {
+                name: '糙米饭',
+                amount: '150g',
+                calories: 180,
+                protein: 4,
+                carbs: 40,
+                fat: 1
+              },
+              {
+                name: '清蒸鸡胸肉',
+                amount: '100g',
+                calories: 165,
+                protein: 31,
+                carbs: 0,
+                fat: 3.6
+              }
+            ]
+          },
+          {
+            id: 3,
+            type: '晚餐',
+            time: '18:45',
+            calories: 450 + dateValue * 8,
+            completed: true,
+            foods: [
+              {
+                name: '意面',
+                amount: '120g',
+                calories: 220,
+                protein: 8,
+                carbs: 42,
+                fat: 1.5
+              },
+              {
+                name: '番茄肉酱',
+                amount: '100g',
+                calories: 150,
+                protein: 10,
+                carbs: 10,
+                fat: 8
+              }
+            ]
+          }
+        ];
+
+        // 计算营养总值
+        let totalCalories = 0;
+        let totalProtein = 0;
+        let totalCarbs = 0;
+        let totalFat = 0;
+        
+        mockMeals.forEach(meal => {
+          meal.foods.forEach(food => {
+            totalCalories += food.calories;
+            totalProtein += food.protein;
+            totalCarbs += food.carbs;
+            totalFat += food.fat;
+          });
+        });
+        
+        // 更新状态
+        setMeals(mockMeals);
+        setNutritionData({
+          calories: {
+            current: totalCalories,
+            goal: 2200
+          },
+          protein: {
+            current: totalProtein,
+            goal: 120
+          },
+          carbs: {
+            current: totalCarbs,
+            goal: 220
+          },
+          fats: {
+            current: totalFat,
+            goal: 73
+          }
+        });
+        
+      } else if (dateValue % 3 === 1) { // 部分记录日
+        const mockMeals = [
+          {
+            id: 1,
+            type: '早餐',
+            time: '07:50',
+            calories: 300 + dateValue * 8,
+            completed: true,
+            foods: [
+              {
+                name: '燕麦粥',
+                amount: '200g',
+                calories: 180,
+                protein: 5,
+                carbs: 30,
+                fat: 3
+              }
+            ]
+          },
+          {
+            id: 2,
+            type: '午餐',
+            time: '',
+            calories: 0,
+            completed: false,
+            foods: []
+          },
+          {
+            id: 3,
+            type: '晚餐',
+            time: '19:10',
+            calories: 400 + dateValue * 6,
+            completed: true,
+            foods: [
+              {
+                name: '沙拉',
+                amount: '250g',
+                calories: 220,
+                protein: 8,
+                carbs: 15,
+                fat: 12
+              }
+            ]
+          }
+        ];
+        
+        // 计算营养总值
+        let totalCalories = 0;
+        let totalProtein = 0;
+        let totalCarbs = 0;
+        let totalFat = 0;
+        
+        mockMeals.forEach(meal => {
+          meal.foods.forEach(food => {
+            totalCalories += food.calories;
+            totalProtein += food.protein;
+            totalCarbs += food.carbs;
+            totalFat += food.fat;
+          });
+        });
+        
+        // 更新状态
+        setMeals(mockMeals);
+        setNutritionData({
+          calories: {
+            current: totalCalories,
+            goal: 2200
+          },
+          protein: {
+            current: totalProtein,
+            goal: 120
+          },
+          carbs: {
+            current: totalCarbs,
+            goal: 220
+          },
+          fats: {
+            current: totalFat,
+            goal: 73
+          }
+        });
+        
+      } else { // 未记录日
+        // 重置为空数据
+        setMeals([
+          {
+            id: 1,
+            type: '早餐',
+            time: '',
+            calories: 0,
+            completed: false,
+            foods: []
+          },
+          {
+            id: 2,
+            type: '午餐',
+            time: '',
+            calories: 0,
+            completed: false,
+            foods: []
+          },
+          {
+            id: 3,
+            type: '晚餐',
+            time: '',
+            calories: 0,
+            completed: false,
+            foods: []
+          }
+        ]);
+        
+        // 重置营养数据
+        setNutritionData({
+          calories: {
+            current: 0,
+            goal: 2200
+          },
+          protein: {
+            current: 0,
+            goal: 120
+          },
+          carbs: {
+            current: 0,
+            goal: 220
+          },
+          fats: {
+            current: 0,
+            goal: 73
+          }
+        });
+      }
+    }
+    
+  } catch (error) {
+    console.error('加载日期数据失败:', error);
+    Alert.alert('错误', '加载数据失败，请重试');
+  } finally {
+    setIsDateLoading(false);
+  }
+};
+
+// 切换到上一周或下一周
+const changeWeek = (direction: 'prev' | 'next') => {
+  const newStart = new Date(currentWeekStart);
+  newStart.setDate(currentWeekStart.getDate() + (direction === 'next' ? 7 : -7));
+  setCurrentWeekStart(newStart);
+  
+  // 选中新周的第一天
+  const newDates = [];
+  for (let i = 0; i < 7; i++) {
+    const date = new Date(newStart);
+    date.setDate(newStart.getDate() + i);
+    newDates.push(date);
+  }
+  
+  // 自动选中当天日期，如果当天在新周内
+  const today = new Date();
+  const todayStr = today.toDateString();
+  const dateInNewWeek = newDates.find(date => date.toDateString() === todayStr);
+  
+  if (dateInNewWeek) {
+    setSelectedDate(dateInNewWeek);
+  } else {
+    // 否则选择新周的第一天
+    setSelectedDate(newDates[0]);
+  }
+  
+  // 滚动到开头
+  if (dateScrollRef.current) {
+    dateScrollRef.current.scrollTo({ x: 0, animated: true });
+  }
+};
+
+// 监听选中日期变化，加载对应数据
+useEffect(() => {
+  loadDataForDate(selectedDate);
+}, [selectedDate]);
+
+// 格式化完整日期显示
+const formatFullDate = (date: Date) => {
+  return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日 ${['周日','周一','周二','周三','周四','周五','周六'][date.getDay()]}`;
+};
 
   const deleteFood = (mealId: number, foodIndex: number) => {
     // 查找要删除的食物
@@ -316,20 +665,6 @@ export default function DietScreen() {
       </View>
     );
   }
-  // 获取日期数组用于日历显示
-  const getDates = () => {
-    const dates = [];
-    const today = new Date();
-    
-    // 前3天和后3天
-    for (let i = -3; i <= 3; i++) {
-      const date = new Date();
-      date.setDate(today.getDate() + i);
-      dates.push(date);
-    }
-    
-    return dates;
-  };
   
   // 格式化日期为星期几
   const formatDayName = (date: Date) => {
@@ -472,56 +807,87 @@ export default function DietScreen() {
         </View>
       )}
 
-      <LinearGradient
+<LinearGradient
         colors={['#2A86FF', '#3F99FF']}
         start={{x: 0, y: 0}}
         end={{x: 0, y: 1}}
         style={[styles.header, { paddingTop:  16 }]}
       >
-        <Text style={styles.headerTitle}>饮食管理</Text>
+        <View style={styles.headerTitleContainer}>
+          <Text style={styles.headerTitle}>饮食管理</Text>
+          <Text style={styles.headerDate}>{formatFullDate(selectedDate)}</Text>
+        </View>
         
-        {/* 日期选择器 */}
-        <ScrollView 
-          horizontal 
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.dateScrollContainer}
-        >
-          {getDates().map((date, index) => {
-            const isToday = date.getDate() === new Date().getDate();
-            const isSelected = date.getDate() === selectedDate.getDate();
-            
-            return (
-              <TouchableOpacity 
-                key={index}
-                style={[
-                  styles.dateItem,
-                  isSelected && styles.selectedDateItem
-                ]}
-                onPress={() => setSelectedDate(date)}
-              >
-                <Text style={[
-                  styles.dateDay,
-                  isSelected && styles.selectedDateText
-                ]}>
-                  {date.getDate()}
-                </Text>
-                <Text style={[
-                  styles.dateWeekday,
-                  isSelected && styles.selectedDateText
-                ]}>
-                  {formatDayName(date)}
-                </Text>
-                {isToday && <View style={styles.todayDot} />}
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+        {/* 日期选择器 - 修改部分 */}
+        <View style={styles.dateNavigationContainer}>
+          <TouchableOpacity 
+            style={styles.weekNavigationButton}
+            onPress={() => changeWeek('prev')}
+          >
+            <Ionicons name="chevron-back" size={20} color="white" />
+          </TouchableOpacity>
+          
+          <ScrollView 
+            ref={dateScrollRef}
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.dateScrollContainer}
+          >
+            {getDates().map((date, index) => {
+              const isToday = date.getDate() === new Date().getDate() &&
+                             date.getMonth() === new Date().getMonth() &&
+                             date.getFullYear() === new Date().getFullYear();
+              const isSelected = date.getDate() === selectedDate.getDate() &&
+                                date.getMonth() === selectedDate.getMonth() &&
+                                date.getFullYear() === selectedDate.getFullYear();
+              
+              return (
+                <TouchableOpacity 
+                  key={index}
+                  style={[
+                    styles.dateItem,
+                    isSelected && styles.selectedDateItem
+                  ]}
+                  onPress={() => setSelectedDate(date)}
+                >
+                  <Text style={[
+                    styles.dateDay,
+                    isSelected && styles.selectedDateText
+                  ]}>
+                    {date.getDate()}
+                  </Text>
+                  <Text style={[
+                    styles.dateWeekday,
+                    isSelected && styles.selectedDateText
+                  ]}>
+                    {formatDayName(date)}
+                  </Text>
+                  {isToday && <View style={styles.todayDot} />}
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+          
+          <TouchableOpacity 
+            style={styles.weekNavigationButton}
+            onPress={() => changeWeek('next')}
+          >
+            <Ionicons name="chevron-forward" size={20} color="white" />
+          </TouchableOpacity>
+        </View>
       </LinearGradient>
       
       <ScrollView 
         style={styles.content}
         showsVerticalScrollIndicator={false}
       >
+        {isDateLoading ? (
+          <View style={styles.dateLoadingContainer}>
+            <ActivityIndicator size="large" color="#2A86FF" />
+            <Text style={styles.loadingText}>加载数据中...</Text>
+          </View>
+        ) : (
+          <>
         {/* 营养摄入概览 */}
         <View style={styles.nutritionCard}>
           <Text style={styles.cardTitle}>今日营养摄入</Text>
@@ -692,8 +1058,8 @@ export default function DietScreen() {
             </View>
           ))}
         </View>
-        
-
+        </>
+        )}
       </ScrollView>
       
     </View>
@@ -1079,5 +1445,29 @@ const styles = StyleSheet.create({
   deleteButton: {
     marginLeft: 12,
     padding: 4,
+  },
+  // 添加新的样式
+  headerTitleContainer: {
+    marginBottom: 8,
+  },
+  headerDate: {
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: 14,
+    marginTop: 2,
+  },
+  dateNavigationContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  weekNavigationButton: {
+    padding: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dateLoadingContainer: {
+    padding: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
