@@ -12,6 +12,9 @@ interface Food {
   name: string;
   amount: string;
   calories: number;
+  protein: number;
+  carbs: number;   
+  fat: number;    
 }
 
 interface Meal {
@@ -114,6 +117,60 @@ export default function DietScreen() {
   const [currentFoodIndex, setCurrentFoodIndex] = useState(0);
 
   const [meals, setMeals] = useState(initialMeals);
+
+  const deleteFood = (mealId: number, foodIndex: number) => {
+    // 查找要删除的食物
+    const mealToUpdate = meals.find(meal => meal.id === mealId);
+    if (!mealToUpdate || foodIndex >= mealToUpdate.foods.length) return;
+    
+    const foodToDelete = mealToUpdate.foods[foodIndex];
+    
+    // 更新餐点数据，删除特定食品
+    setMeals(prev => 
+      prev.map(meal => {
+        if (meal.id === mealId) {
+          // 计算新的卡路里总量
+          const newCalories = meal.calories - foodToDelete.calories;
+          
+          // 过滤掉要删除的食品
+          const newFoods = meal.foods.filter((_, idx) => idx !== foodIndex);
+          
+          // 如果删除后没有食品，标记为未完成
+          const isCompleted = newFoods.length > 0;
+          
+          return {
+            ...meal,
+            completed: isCompleted,
+            calories: newCalories,
+            foods: newFoods,
+            // 如果删除后没有食物，重置时间
+            time: newFoods.length > 0 ? meal.time : ''
+          };
+        }
+        return meal;
+      })
+    );
+    
+    // 更新营养摄入数据，直接使用食物的详细营养素数据
+    setNutritionData(prev => ({
+      calories: {
+        ...prev.calories,
+        current: prev.calories.current - foodToDelete.calories,
+      },
+      protein: {
+        ...prev.protein,
+        current: prev.protein.current - foodToDelete.protein,
+      },
+      carbs: {
+        ...prev.carbs,
+        current: prev.carbs.current - foodToDelete.carbs,
+      },
+      fats: {
+        ...prev.fats,
+        current: prev.fats.current - foodToDelete.fat,
+      },
+    }));
+  };
   useEffect(() => {
     const fetchToken = async () => {
       try {
@@ -362,6 +419,9 @@ export default function DietScreen() {
                   name,
                   amount: `${weight}g`,
                   calories: calorieValue,
+                  protein: proteinValue,
+                  fat: fatValue,
+                  carbs: carbsValue,
                 };
             
                 // ✅ 更新 meals 数组
@@ -587,7 +647,31 @@ export default function DietScreen() {
                       <Text style={styles.foodName}>{food.name}</Text>
                       <Text style={styles.foodAmount}>{food.amount}</Text>
                     </View>
-                    <Text style={styles.foodCalories}>{food.calories} 千卡</Text>
+                    <View style={styles.foodRightContainer}>
+                      <Text style={styles.foodCalories}>{food.calories} 千卡</Text>
+                      <TouchableOpacity 
+                        style={styles.deleteButton}
+                        onPress={() => {
+                          Alert.alert(
+                            "删除食品",
+                            `确定要删除"${food.name}"吗？`,
+                            [
+                              {
+                                text: "取消",
+                                style: "cancel"
+                              },
+                              { 
+                                text: "删除", 
+                                onPress: () => deleteFood(meal.id, index),
+                                style: "destructive"
+                              }
+                            ]
+                          );
+                        }}
+                      >
+                        <Ionicons name="trash-outline" size={16} color="#FF6B6B" />
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 ))}
               </View>
@@ -986,5 +1070,14 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     opacity: 0.7,
+  },
+  // 在 StyleSheet.create 中添加这些样式
+  foodRightContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  deleteButton: {
+    marginLeft: 12,
+    padding: 4,
   },
 });
