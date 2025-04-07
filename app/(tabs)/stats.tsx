@@ -8,7 +8,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // 导入健康计算相关API
 import { calculateBMI, getBMIStatus, calculateIdealWeightRange, calculateBMR, calculateTDEE, estimateBodyFat } from '../api/healthCalculator';
-import { updateWeightGoal, fetchCurrentUser } from '../api/user';
+import { updateWeightGoal, fetchCurrentUser,updateUser } from '../api/user';
 import { LineChart, BarChart } from 'react-native-chart-kit';
 
 // 注意：这里需要安装图表库
@@ -54,7 +54,9 @@ export default function StatsScreen() {
   const [userId, setUserId] = useState<number | null>(null);
   
   // 添加状态变量来控制目标体重修改模态框
+
   const [showWeightGoalModal, setShowWeightGoalModal] = useState(false);
+  const [newInitialWeight, setNewInitialWeight] = useState('');
   const [newWeightGoal, setNewWeightGoal] = useState('');
   
   // 使用useState初始化用户健康数据
@@ -125,28 +127,40 @@ export default function StatsScreen() {
         return;
       }
       
+    const initialWeightValue = parseFloat(newInitialWeight);
+    if (isNaN(initialWeightValue) || initialWeightValue <= 0) {
+      Alert.alert('输入错误', '请输入有效的初始体重');
+      return;
+    }
+
       setIsLoading(true);
       
-      // 调用API更新目标体重
-      await updateWeightGoal(userId, weightGoalValue);
+      // 调用API更新目标体重和初始体重
+      await updateUser(userId, {
+        weight_goal: weightGoalValue,
+        initial_weight: initialWeightValue
+      });
       
       // 更新本地用户数据
       setUserData(prevData => ({
-        ...prevData,
-        weightGoal: weightGoalValue
-      }));
-      
-      // 更新AsyncStorage中的用户信息
-      const userInfoString = await AsyncStorage.getItem('user_info');
-      if (userInfoString) {
-        const userInfo = JSON.parse(userInfoString);
-        userInfo.weight_goal = weightGoalValue;
-        await AsyncStorage.setItem('user_info', JSON.stringify(userInfo));
-      }
+      ...prevData,
+      weightGoal: weightGoalValue,
+      initialWeight: initialWeightValue,
+      weightChange: prevData.currentWeight - initialWeightValue
+    }));
+    
+    // 更新AsyncStorage中的用户信息
+    const userInfoString = await AsyncStorage.getItem('user_info');
+    if (userInfoString) {
+      const userInfo = JSON.parse(userInfoString);
+      userInfo.weight_goal = weightGoalValue;
+      userInfo.initial_weight = initialWeightValue;
+      await AsyncStorage.setItem('user_info', JSON.stringify(userInfo));
+    }
       
       // 关闭模态框
       setShowWeightGoalModal(false);
-      Alert.alert('成功', '目标体重已更新');
+      Alert.alert('成功', '目标体重和初始体重已更新');
       
     } catch (error) {
       console.error('保存目标体重失败:', error);
@@ -370,27 +384,33 @@ if (isLoading) {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* 关键指标概览 */}
         <View style={styles.summaryCard}>
-          <View style={styles.weightContainer}>
-            <View style={styles.weightValueContainer}>
-              <Text style={styles.weightValue}>{userData.currentWeight}</Text>
-              <Text style={styles.weightUnit}>kg</Text>
+        <View style={styles.weightContainer}>
+              <View>
+                <View style={styles.weightValueContainer}>
+                  <Text style={styles.weightValue}>{userData.currentWeight}</Text>
+                  <Text style={styles.weightUnit}>kg</Text>
+                </View>
+                <Text style={styles.initialWeightText}>
+                  初始体重: <Text style={styles.initialWeightValue}>{userData.initialWeight} kg</Text>
+                </Text>
+              </View>
+              
+              <View style={styles.weightChange}>
+                <Ionicons 
+                  name={userData.weightChange < 0 ? "arrow-down" : "arrow-up"} 
+                  size={14} 
+                  color={userData.weightChange <= 0 ? "#4CD97B" : "#FF6B6B"} 
+                />
+                <Text 
+                  style={[
+                    styles.weightChangeText, 
+                    {color: userData.weightChange <= 0 ? "#4CD97B" : "#FF6B6B"}
+                  ]}
+                >
+                  {Math.abs(userData.weightChange).toFixed(1)} kg
+                </Text>
+              </View>
             </View>
-            <View style={styles.weightChange}>
-              <Ionicons 
-                name={userData.weightChange < 0 ? "arrow-down" : "arrow-up"} 
-                size={14} 
-                color={userData.weightChange < 0 ? "#4CD97B" : "#FF6B6B"} 
-              />
-              <Text 
-                style={[
-                  styles.weightChangeText, 
-                  {color: userData.weightChange < 0 ? "#4CD97B" : "#FF6B6B"}
-                ]}
-              >
-                {Math.abs(userData.weightChange)} kg
-              </Text>
-            </View>
-          </View>
           
           <View style={styles.weightGoalContainer}>
             <View style={styles.weightGoalHeader}>
@@ -401,6 +421,7 @@ if (isLoading) {
                 style={styles.editWeightGoalButton}
                 onPress={() => {
                   setNewWeightGoal(userData.weightGoal.toString());
+                  setNewInitialWeight(userData.initialWeight.toString());
                   setShowWeightGoalModal(true);
                 }}
               >
@@ -740,8 +761,24 @@ if (isLoading) {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
-            <Text style={styles.modalTitle}>设置目标体重</Text>
+            <Text style={styles.modalTitle}>设置目标与初始体重</Text>
             
+            {/* 初始体重输入框 */}
+            <Text style={styles.inputLabel}>初始体重</Text>
+            <View style={styles.inputContainer}>
+              <TextInput
+                style={styles.weightInput}
+                keyboardType="numeric"
+                value={newInitialWeight}
+                onChangeText={setNewInitialWeight}
+                placeholder="请输入初始体重 (kg)"
+                placeholderTextColor="#999"
+              />
+              <Text style={styles.inputUnit}>kg</Text>
+            </View>
+            
+            {/* 目标体重输入框 */}
+            <Text style={styles.inputLabel}>目标体重</Text>
             <View style={styles.inputContainer}>
               <TextInput
                 style={styles.weightInput}
@@ -755,9 +792,9 @@ if (isLoading) {
             </View>
             
             <Text style={styles.modalInfo}>
-              设置合理的目标体重是实现健康减重的重要步骤。
+              初始体重记录您开始减重时的体重，用于计算减重进展。
               {'\n\n'}
-              建议按照每周减重0.5-1kg的健康节奏设定目标。
+              设置合理的目标体重是实现健康减重的重要步骤，建议按照每周减重0.5-1kg的健康节奏设定目标。
             </Text>
             
             <View style={styles.modalButtons}>
@@ -1354,5 +1391,20 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
   },
-  
+
+  initialWeightText: {
+    fontSize: 12,
+    color: '#777',
+    marginTop: 4,
+  },
+  initialWeightValue: {
+    fontWeight: '500',
+    color: '#555',
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#444',
+    marginBottom: 6,
+  },
 });

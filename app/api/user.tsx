@@ -42,6 +42,7 @@ export async function updateUser(userId: number, userData: {
   birthday?: string;
   profile_image?: string;
 }) {
+  console.log(`准备更新用户(ID:${userId})信息:`, userData);
   return await apiRequest(`/api/users/${userId}`, {
     method: 'PUT',
     body: JSON.stringify(userData)
