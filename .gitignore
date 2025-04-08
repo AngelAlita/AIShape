@@ -1,38 +1,49 @@
-# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+# === Python 相关 ===
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+*.pdb
+*.egg-info/
+*.egg
+*.log
 
-# dependencies
-node_modules/
+# === 虚拟环境 ===
+venv/
+ENV/
+env/
+.venv/
 
-# Expo
-.expo/
-dist/
-web-build/
-expo-env.d.ts
+# === Flask 设置 ===
+instance/
+*.db
+*.sqlite3
 
-# Native
-*.orig.*
-*.jks
-*.p8
-*.p12
-*.key
-*.mobileprovision
+# === VS Code 编辑器设置 ===
+.vscode/
 
-# Metro
-.metro-health-check*
-
-# debug
-npm-debug.*
-yarn-debug.*
-yarn-error.*
-
-# macOS
+# === 操作系统垃圾文件 ===
 .DS_Store
-*.pem
+Thumbs.db
 
-# local env files
-.env*.local
+# === pip 依赖缓存 ===
+pip-wheel-metadata/
+*.egg-info/
+build/
+dist/
 
-# typescript
-*.tsbuildinfo
+# === dotenv 环境变量 ===
+.env
+.env.*
 
-app-example
+# === pytest / 单元测试缓存 ===
+.cache/
+.pytest_cache/
+htmlcov/
+coverage.xml
+
+# === mypy / lint 工具 ===
+.mypy_cache/
+.dmypy.json
+.pyre/
