@@ -324,13 +324,25 @@ const calculateStreak = (workouts: Workout[]) => {
     setSessionVisible(true);
   };
   
-  const handleCompleteWorkout = async (workoutId: number) => {
+  const handleCompleteWorkout = async (workoutId: number, updates?: {
+    time?: string;
+    duration?: number;
+    calories?: number;
+  }) => {
     try {
       // 更新训练状态为已完成
       const workoutToUpdate = todayWorkouts.find(w => w.id === workoutId);
       if (!workoutToUpdate) return;
       
-      const updatedWorkout = { ...workoutToUpdate, completed: true };
+      // 创建更新后的训练对象，包含完成状态和传入的更新数据
+      const updatedWorkout = { 
+        ...workoutToUpdate, 
+        completed: true,
+        // 如果有传入更新值，则使用更新值，否则保留原值
+        time: updates?.time || workoutToUpdate.time,
+        duration: updates?.duration || workoutToUpdate.duration,
+        calories: updates?.calories || workoutToUpdate.calories
+      };
       
       // 调用 API 更新训练状态
       await updateWorkout(workoutId, convertToApiWorkout(updatedWorkout));

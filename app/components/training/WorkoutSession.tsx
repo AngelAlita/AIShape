@@ -32,12 +32,17 @@ interface SessionExercise extends Exercise {
     exercises: SessionExercise[];
   }
 
-interface WorkoutSessionProps {
-  visible: boolean;
-  workout: Workout; // 使用原始的 Workout 类型
-  onClose: () => void;
-  onComplete: (workoutId: number) => void;
-}
+
+  interface WorkoutSessionProps {
+    visible: boolean;
+    workout: Workout;
+    onClose: () => void;
+    onComplete: (workoutId: number, updates?: {
+      time?: string;
+      duration?: number;
+      calories?: number;
+    }) => void;
+  }
 
 const WorkoutSession = ({ visible, workout, onClose, onComplete }: WorkoutSessionProps) => {
   // 准备训练数据 - 为每个动作添加已完成状态数组
@@ -49,6 +54,52 @@ const WorkoutSession = ({ visible, workout, onClose, onComplete }: WorkoutSessio
     }))
   }));
   
+  const [startTime] = useState(new Date()); // 记录训练开始时间
+
+  // 修改 finishWorkout 函数
+const finishWorkout = () => {
+  // 停止计时器
+  setIsTimerRunning(false);
+  
+  // 获取结束时间
+  const endTime = new Date();
+  
+  // 计算实际持续时间（分钟）
+  const actualDuration = Math.max(1, Math.round(elapsedTime / 60));
+  
+  // 格式化时间范围字符串
+  const timeRange = `${formatTimeString(startTime)} - ${formatTimeString(endTime)}`;
+  
+  // 估算卡路里消耗（根据原始卡路里和实际持续时间比例）
+  const estimatedCalories = Math.round(
+    (workout.calories * actualDuration) / workout.duration
+  );
+  
+  // 调用回调函数标记训练完成，并传递更新的信息
+  onComplete(workout.id, {
+    time: timeRange,
+    duration: actualDuration,
+    calories: estimatedCalories
+  });
+  
+  // 重置状态
+  setElapsedTime(0);
+  setCurrentExerciseIndex(0);
+  setNotes('');
+  
+  // 关闭训练会话
+  onClose();
+};
+
+// 格式化时间为 HH:MM 格式的辅助函数
+const formatTimeString = (date: Date) => {
+  return date.toLocaleTimeString('zh-CN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  });
+};
+
   // 计时器状态
   const [elapsedTime, setElapsedTime] = useState(0);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
@@ -131,22 +182,6 @@ const WorkoutSession = ({ visible, workout, onClose, onComplete }: WorkoutSessio
     }
   };
   
-  // 结束训练并保存
-  const finishWorkout = () => {
-    // 停止计时器
-    setIsTimerRunning(false);
-    
-    // 调用回调函数标记训练完成
-    onComplete(workout.id);
-    
-    // 重置状态
-    setElapsedTime(0);
-    setCurrentExerciseIndex(0);
-    setNotes('');
-    
-    // 关闭训练会话
-    onClose();
-  };
   
   // 切换到下一个动作
   const goToNextExercise = () => {
