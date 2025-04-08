@@ -64,6 +64,7 @@ const WorkoutSession = ({ visible, workout, onClose, onComplete }: WorkoutSessio
   const totalExerciseSets = currentWorkout.exercises.reduce(
     (total, exercise) => total + exercise.sets, 0);
   
+    
   // 处理计时器
   useEffect(() => {
     let timer: NodeJS.Timeout;

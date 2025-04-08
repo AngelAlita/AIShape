@@ -94,3 +94,57 @@ export function calculateBMI(heightCm: number, weightKg: number): number {
     // 确保结果在合理范围内
     return parseFloat(Math.max(3, Math.min(45, bodyFat)).toFixed(1));
   }
+
+  /**
+ * 计算个性化营养目标
+ * @param tdee 每日总能量消耗(卡路里)
+ * @param weightGoal 目标体重(kg)
+ * @param currentWeight 当前体重(kg)
+ * @param gender 性别('male'或'female')
+ * @param activityLevel 活动水平(默认值为1.4表示轻度活动)
+ * @returns 返回营养目标对象，包括卡路里、蛋白质、碳水化合物和脂肪
+ */
+export function calculateNutritionGoals(
+  tdee: number, 
+  weightGoal: number, 
+  currentWeight: number, 
+  gender: string,
+  activityLevel: number = 1.4
+): {calories: number, protein: number, carbs: number, fats: number} {
+  // 基于目标体重决定每日卡路里调整
+  let calorieAdjustment = 0;
+  
+  if (weightGoal < currentWeight) {
+    // 减重目标：每天减少500卡路里
+    calorieAdjustment = -500;
+  } else if (weightGoal > currentWeight) {
+    // 增重目标：每天增加300卡路里
+    calorieAdjustment = 300;
+  }
+  
+  // 最终每日卡路里目标
+  const calorieGoal = Math.max(1200, Math.round(tdee + calorieAdjustment));
+  
+  // 蛋白质：体重每公斤1.6-2.2克(减脂时取高值，增肌时也取高值)
+  let proteinPerKg = 1.6;
+  if (weightGoal < currentWeight || weightGoal > currentWeight) {
+    proteinPerKg = 2.0;
+  }
+  const proteinGoal = Math.round(currentWeight * proteinPerKg);
+  
+  // 脂肪：总卡路里的25-30%
+  const fatCalories = calorieGoal * (gender === 'male' ? 0.25 : 0.3);
+  const fatGoal = Math.round(fatCalories / 9); // 脂肪1克=9卡路里
+  
+  // 碳水：剩余卡路里
+  const proteinCalories = proteinGoal * 4; // 蛋白质1克=4卡路里
+  const remainingCalories = calorieGoal - proteinCalories - fatCalories;
+  const carbGoal = Math.round(remainingCalories / 4); // 碳水1克=4卡路里
+  
+  return {
+    calories: calorieGoal,
+    protein: proteinGoal,
+    carbs: carbGoal,
+    fats: fatGoal
+  };
+}

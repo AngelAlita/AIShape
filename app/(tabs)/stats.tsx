@@ -5,6 +5,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+// 引入必要的钩子
+import { useFocusEffect } from '@react-navigation/native';
+import { useCallback } from 'react';
+
+
 
 // 导入健康计算相关API
 import { calculateBMI, getBMIStatus, calculateIdealWeightRange, calculateBMR, calculateTDEE, estimateBodyFat } from '../api/healthCalculator';
@@ -170,8 +175,14 @@ export default function StatsScreen() {
     }
   };
   // 加载用户数据和计算健康指标
-  useEffect(() => {
-    const loadUserHealthData = async () => {
+// ...existing code...
+
+useFocusEffect(
+  useCallback(() => {
+    console.log('数据页面获取焦点，正在刷新数据...');
+    
+    // 合并loadUserHealthData和loadUserId功能到一个刷新函数
+    const refreshAllData = async () => {
       try {
         setIsLoading(true);
         
@@ -184,13 +195,28 @@ export default function StatsScreen() {
         }
         
         const userInfo = JSON.parse(userInfoString);
-        console.log('获取到的用户信息:', userInfo);
+        console.log('刷新获取到的用户信息:', userInfo);
         
-        // 获取必要参数
-        const height = userInfo.height || 170;  // 厘米
-        const currentWeight = userInfo.current_weight || 70;  // 公斤
-        const initialWeight = userInfo.initial_weight || currentWeight + 3;  // 如果没有初始重量，假设比当前重量多3kg
-        const weightGoal = userInfo.weight_goal || currentWeight - 5;  // 如果没有目标重量，假设比当前重量少5kg
+        // 更新用户ID
+        if (userInfo.id) {
+          setUserId(userInfo.id);
+        }
+        
+        // 获取必要参数，添加空值检查但不提供默认值
+        const height = userInfo.height || 170;  // 身高还是需要默认值用于计算
+        
+        // 体重相关数据，为null时不提供默认值
+        const currentWeight = userInfo.current_weight !== null && userInfo.current_weight !== undefined 
+          ? parseFloat(userInfo.current_weight) 
+          : NaN;  // 如果为null，设置为NaN
+          
+        const initialWeight = userInfo.initial_weight !== null && userInfo.initial_weight !== undefined 
+          ? parseFloat(userInfo.initial_weight) 
+          : NaN;  // 如果为null，设置为NaN
+          
+        const weightGoal = userInfo.weight_goal !== null && userInfo.weight_goal !== undefined 
+          ? parseFloat(userInfo.weight_goal) 
+          : NaN;  // 如果为null，设置为NaN
         
         // 计算年龄
         let age = 18;  // 默认年龄
@@ -210,47 +236,71 @@ export default function StatsScreen() {
         const gender = userInfo.gender || 'male';
         
         // 使用健康计算API
-        const bmi = calculateBMI(height, currentWeight);
-        const bmiStatus = getBMIStatus(bmi);
+        const bmi = !isNaN(currentWeight) ? calculateBMI(height, currentWeight) : NaN;
+        const bmiStatus = !isNaN(bmi) ? getBMIStatus(bmi) : '--';
         const idealWeightRange = calculateIdealWeightRange(height);
-        const bmr = calculateBMR(height, currentWeight, age, gender);
-        const tdee = calculateTDEE(bmr, 1.4); // 假设轻度活动水平
-        const bodyFatPercentage = estimateBodyFat(height, currentWeight, null, gender);
+        const bmr = !isNaN(currentWeight) ? calculateBMR(height, currentWeight, age, gender) : NaN;
+        const tdee = !isNaN(bmr) ? calculateTDEE(bmr, 1.4) : NaN; // 假设轻度活动水平
+        const bodyFatPercentage = !isNaN(currentWeight) ? estimateBodyFat(height, currentWeight, null, gender) : NaN;
         
         // 估算肌肉量 (简单估算，实际应有更准确的公式)
-        const muscleMass = currentWeight * (gender === 'male' ? 0.4 : 0.35);
+        const muscleMass = !isNaN(currentWeight) ? currentWeight * (gender === 'male' ? 0.4 : 0.35) : NaN;
         
         // 设置用户健康数据
         setUserData({
           currentWeight,
           initialWeight,
-          weightChange: currentWeight - initialWeight,
+          weightChange: !isNaN(currentWeight) && !isNaN(initialWeight) ? currentWeight - initialWeight : NaN,
           weightGoal,
           bmi,
           bmiStatus,
           bodyFatPercentage,
           waterPercentage: gender === 'male' ? 60 : 55,  // 估算值
-          muscleMass: parseFloat(muscleMass.toFixed(1)),
+          muscleMass: !isNaN(muscleMass) ? parseFloat(muscleMass.toFixed(1)) : NaN,
           lastWorkout: '今天', // 这个数据需要从训练记录获取
           workoutsThisWeek: 4,  // 这个数据需要从训练记录获取
-          caloriesBurnedToday: Math.round(tdee / 3),  // 估算值
-          caloriesBurnedWeek: Math.round(tdee * 5),  // 估算值
-          dailyStepsAverage: Math.round(tdee / 40),  // 估算值
+          caloriesBurnedToday: !isNaN(tdee) ? Math.round(tdee / 3) : NaN,  // 估算值
+          caloriesBurnedWeek: !isNaN(tdee) ? Math.round(tdee * 5) : NaN,  // 估算值
+          dailyStepsAverage: !isNaN(tdee) ? Math.round(tdee / 40) : NaN,  // 估算值
           activeMinutesWeek: 360,  // 默认值
           sleepAverage: 7.2,  // 默认值
           restingHeartRate: 65,  // 默认值
           tdee,
           bmr
         });
+
+        // 设置模态框的初始值，确保不为"undefined"或"null"字符串
+        setNewWeightGoal(isNaN(weightGoal) ? "" : weightGoal.toString());
+        setNewInitialWeight(isNaN(initialWeight) ? "" : initialWeight.toString());
       } catch (error) {
-        console.error('加载健康数据失败:', error);
+        console.error('刷新健康数据失败:', error);
+        
+        // 设置无效数据，显示为"--"
+        setUserData(prevData => ({
+          ...prevData,
+          currentWeight: NaN,
+          initialWeight: NaN,
+          weightChange: NaN,
+          weightGoal: NaN,
+        }));
+        
+        setNewWeightGoal("");
+        setNewInitialWeight("");
       } finally {
         setIsLoading(false);
       }
     };
     
-    loadUserHealthData();
-  }, []);
+    refreshAllData();
+    
+    // 可选：返回清除函数
+    return () => {
+      console.log('数据页面失去焦点');
+      // 如果有需要取消的异步操作，可以在这里处理
+    };
+  }, [])
+);
+
 
   // 模拟图表数据 - 实际使用时请替换为图表组件
   const weightChartData = {
@@ -384,87 +434,107 @@ if (isLoading) {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* 关键指标概览 */}
         <View style={styles.summaryCard}>
-        <View style={styles.weightContainer}>
-              <View>
-                <View style={styles.weightValueContainer}>
-                  <Text style={styles.weightValue}>{userData.currentWeight}</Text>
-                  <Text style={styles.weightUnit}>kg</Text>
-                </View>
-                <Text style={styles.initialWeightText}>
-                  初始体重: <Text style={styles.initialWeightValue}>{userData.initialWeight} kg</Text>
-                </Text>
-              </View>
-              
-              <View style={styles.weightChange}>
-                <Ionicons 
-                  name={userData.weightChange < 0 ? "arrow-down" : "arrow-up"} 
-                  size={14} 
-                  color={userData.weightChange <= 0 ? "#4CD97B" : "#FF6B6B"} 
-                />
-                <Text 
-                  style={[
-                    styles.weightChangeText, 
-                    {color: userData.weightChange <= 0 ? "#4CD97B" : "#FF6B6B"}
-                  ]}
-                >
-                  {Math.abs(userData.weightChange).toFixed(1)} kg
-                </Text>
-              </View>
-            </View>
-          
-          <View style={styles.weightGoalContainer}>
-            <View style={styles.weightGoalHeader}>
-              <Text style={styles.weightGoalText}>
-                距离目标体重还有 <Text style={styles.weightGoalValue}>{Math.abs(userData.currentWeight - userData.weightGoal).toFixed(1)}</Text> kg
+  <View style={styles.weightContainer}>
+    <View>
+    <View style={styles.weightValueContainer}>
+          <View>
+            <Text style={styles.weightLabel}>目前体重</Text>
+            <View style={styles.currentWeightRow}>
+              <Text style={styles.weightValue}>
+                {isNaN(userData.currentWeight) ? "--" : userData.currentWeight}
               </Text>
-              <TouchableOpacity 
-                style={styles.editWeightGoalButton}
-                onPress={() => {
-                  setNewWeightGoal(userData.weightGoal.toString());
-                  setNewInitialWeight(userData.initialWeight.toString());
-                  setShowWeightGoalModal(true);
-                }}
-              >
-                <Ionicons name="pencil" size={16} color="#2A86FF" />
-              </TouchableOpacity>
-            </View>
-            <View style={styles.weightProgressContainer}>
-              <View style={styles.weightProgressBg}>
-                <View 
-                  style={[
-                    styles.weightProgress,
-                    { 
-                      width: `${Math.min(100, Math.max(0, ((userData.initialWeight - userData.currentWeight) / (userData.initialWeight - userData.weightGoal)) * 100))}%` 
-                    }
-                  ]}
-                />
-              </View>
+              {!isNaN(userData.currentWeight) && <Text style={styles.weightUnit}>kg</Text>}
             </View>
           </View>
         </View>
+      <Text style={styles.initialWeightText}>
+        初始体重: <Text style={styles.initialWeightValue}>
+          {isNaN(userData.initialWeight) ? "--" : `${userData.initialWeight} kg`}
+        </Text>
+      </Text>
+    </View>
+    
+    <View style={styles.weightChange}>
+      <Ionicons 
+        name={userData.weightChange <= 0 ? "arrow-down" : "arrow-up"} 
+        size={14} 
+        color={userData.weightChange <= 0 ? "#4CD97B" : "#FF6B6B"} 
+        style={{opacity: isNaN(userData.weightChange) ? 0.5 : 1}}
+      />
+      <Text 
+        style={[
+          styles.weightChangeText, 
+          {color: userData.weightChange <= 0 ? "#4CD97B" : "#FF6B6B"}
+        ]}
+      >
+        {isNaN(userData.weightChange) ? "--" : Math.abs(userData.weightChange).toFixed(1)} {!isNaN(userData.weightChange) && "kg"}
+      </Text>
+    </View>
+  </View>
+  
+      <View style={styles.weightGoalContainer}>
+        <View style={styles.weightGoalHeader}>
+          <Text style={styles.weightGoalText}>
+            距离目标体重还有 <Text style={styles.weightGoalValue}>
+              {isNaN(userData.currentWeight) || isNaN(userData.weightGoal) 
+                ? "--" 
+                : Math.abs(userData.currentWeight - userData.weightGoal).toFixed(1)}
+            </Text>
+            {!isNaN(userData.currentWeight) && !isNaN(userData.weightGoal) && " kg"}
+          </Text>
+          <TouchableOpacity 
+            style={styles.editWeightGoalButton}
+            onPress={() => {
+              setNewWeightGoal(isNaN(userData.weightGoal) ? "" : userData.weightGoal.toString());
+              setNewInitialWeight(isNaN(userData.initialWeight) ? "" : userData.initialWeight.toString());
+              setShowWeightGoalModal(true);
+            }}
+          >
+            <Ionicons name="pencil" size={16} color="#2A86FF" />
+          </TouchableOpacity>
+        </View>
+        <View style={styles.weightProgressContainer}>
+          <View style={styles.weightProgressBg}>
+            <View 
+              style={[
+                styles.weightProgress,
+                { 
+                  width: `${isNaN(userData.initialWeight) || isNaN(userData.currentWeight) || isNaN(userData.weightGoal) 
+                    ? 0 
+                    : Math.min(100, Math.max(0, ((userData.initialWeight - userData.currentWeight) / (userData.initialWeight - userData.weightGoal)) * 100))}%` 
+                }
+              ]}
+            />
+          </View>
+        </View>
+        {(isNaN(userData.initialWeight) || isNaN(userData.currentWeight) || isNaN(userData.weightGoal)) && (
+          <Text style={styles.noDataText}>请点击编辑图标设置您的初始体重和目标体重</Text>
+        )}
+      </View>
+    </View>
         
         {/* 身体成分卡片 */}
         <View style={styles.bodyCompositionCard}>
-          <Text style={styles.sectionTitle}>身体成分</Text>
-          <View style={styles.bodyCompositionGrid}>
-            <View style={styles.bodyCompositionItem}>
-              <Text style={styles.bodyCompositionValue}>{userData.bmi}</Text>
-              <Text style={styles.bodyCompositionLabel}>BMI</Text>
-            </View>
-            <View style={styles.bodyCompositionItem}>
-              <Text style={styles.bodyCompositionValue}>{userData.bodyFatPercentage}%</Text>
-              <Text style={styles.bodyCompositionLabel}>体脂率</Text>
-            </View>
-            <View style={styles.bodyCompositionItem}>
-              <Text style={styles.bodyCompositionValue}>{userData.muscleMass} kg</Text>
-              <Text style={styles.bodyCompositionLabel}>肌肉量</Text>
-            </View>
-            <View style={styles.bodyCompositionItem}>
-              <Text style={styles.bodyCompositionValue}>{userData.waterPercentage}%</Text>
-              <Text style={styles.bodyCompositionLabel}>体水分</Text>
-            </View>
+        <Text style={styles.sectionTitle}>身体成分</Text>
+        <View style={styles.bodyCompositionGrid}>
+          <View style={styles.bodyCompositionItem}>
+            <Text style={styles.bodyCompositionValue}>{isNaN(userData.bmi) ? "--" : userData.bmi}</Text>
+            <Text style={styles.bodyCompositionLabel}>BMI</Text>
+          </View>
+          <View style={styles.bodyCompositionItem}>
+            <Text style={styles.bodyCompositionValue}>{isNaN(userData.bodyFatPercentage) ? "--" : userData.bodyFatPercentage + "%"}</Text>
+            <Text style={styles.bodyCompositionLabel}>体脂率</Text>
+          </View>
+          <View style={styles.bodyCompositionItem}>
+            <Text style={styles.bodyCompositionValue}>{isNaN(userData.muscleMass) ? "--" : userData.muscleMass + " kg"}</Text>
+            <Text style={styles.bodyCompositionLabel}>肌肉量</Text>
+          </View>
+          <View style={styles.bodyCompositionItem}>
+            <Text style={styles.bodyCompositionValue}>{isNaN(userData.waterPercentage) ? "--" : userData.waterPercentage + "%"}</Text>
+            <Text style={styles.bodyCompositionLabel}>体水分</Text>
           </View>
         </View>
+      </View>
         
         {/* 活动概览卡片 */}
         <View style={styles.activityCard}>
@@ -1406,5 +1476,21 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#444',
     marginBottom: 6,
+  },
+  noDataText: {
+    fontSize: 12,
+    color: '#888',
+    fontStyle: 'italic',
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  weightLabel: {
+    fontSize: 12,
+    color: '#777',
+    marginBottom: 2,
+  },
+  currentWeightRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
   },
 });

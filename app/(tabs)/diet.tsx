@@ -8,6 +8,11 @@ import * as FileSystem from 'expo-file-system';
 import ResultModal, { ResultModalProps } from '../components/ResultModal';
 import { useLocalSearchParams } from 'expo-router';
 import { fetchMealsByDate,createMeal,deleteMeal,addFoodToMeal,updateMeal,deleteFood } from '../api/meals';
+import { calculateBMR, calculateTDEE, calculateNutritionGoals } from '../api/healthCalculator';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+// 引入必要的钩子
+import { useFocusEffect } from '@react-navigation/native';
+import { useCallback } from 'react';
 
 interface Food {
   id?: number; // 可选属性，表示食物的唯一标识符
@@ -73,22 +78,10 @@ export default function DietScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [currentMealId, setCurrentMealId] = useState<number | null>(null);
   const [nutritionData, setNutritionData] = useState({
-    calories: {
-      current: 0,
-      goal: 2200
-    },
-    protein: {
-      current: 0,
-      goal: 120
-    },
-    carbs: {
-      current: 0,
-      goal: 220
-    },
-    fats: {
-      current: 0,
-      goal: 73
-    }
+    calories: { current: 0, goal: 2200 },
+    protein: { current: 0, goal: 120 },
+    carbs: { current: 0, goal: 220 },
+    fats: { current: 0, goal: 73 }
   });
   const [isRecognizing, setIsRecognizing] = useState(false);
   const [currentFoodIndex, setCurrentFoodIndex] = useState(0);
@@ -219,42 +212,143 @@ const addNewMeal = async () => {
     'plain-text'
   );
 };
-  // 添加计算总营养数据的函数
-  const calculateNutritionTotals = (mealsData: Meal[]) => {
-    let totalCalories = 0;
-    let totalProtein = 0;
-    let totalCarbs = 0;
-    let totalFat = 0;
+
+const loadUserDataAndNutritionGoals = async () => {
+  try {
+    // 从AsyncStorage获取用户信息
+    const userInfoString = await AsyncStorage.getItem('user_info');
+    if (!userInfoString) {
+      console.log('未找到用户数据，使用默认营养目标');
+      return;
+    }
     
-    mealsData.forEach(meal => {
-      meal.foods.forEach(food => {
-        totalCalories += food.calories;
-        totalProtein += food.protein || 0;
-        totalCarbs += food.carbs || 0;
-        totalFat += food.fat || 0;
-      });
-    });
+    const userInfo = JSON.parse(userInfoString);
+    console.log('获取到的用户信息:', userInfo);
     
-    // 更新营养数据状态
-    setNutritionData({
+    // 获取必要参数
+    const height = userInfo.height || 170;  // 厘米
+    const currentWeight = userInfo.current_weight || 70;  // 公斤
+    const weightGoal = userInfo.weight_goal || currentWeight - 5;  // 如果没有目标重量，假设比当前重量少5kg
+    const gender = userInfo.gender || 'male';
+    
+    // 计算年龄
+    let age = 18;  // 默认年龄
+    if (userInfo.birthday) {
+      const birthDate = new Date(userInfo.birthday);
+      const today = new Date();
+      age = today.getFullYear() - birthDate.getFullYear();
+      
+      // 调整年龄，考虑生日是否已过
+      const m = today.getMonth() - birthDate.getMonth();
+      if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+      }
+    }
+    
+    // 计算BMR和TDEE
+    const bmr = calculateBMR(height, currentWeight, age, gender);
+    const activityLevel = 1.4; // 假设轻度活动水平
+    const tdee = calculateTDEE(bmr, activityLevel);
+    
+    // 计算营养目标
+    const nutritionGoals = calculateNutritionGoals(
+      tdee, 
+      weightGoal, 
+      currentWeight, 
+      gender,
+      activityLevel
+    );
+    
+    console.log('计算的营养目标:', nutritionGoals);
+    
+    // 更新营养目标状态
+    setNutritionData(prevData => ({
       calories: {
-        current: totalCalories,
-        goal: 2200
+        current: prevData.calories.current,
+        goal: nutritionGoals.calories
       },
       protein: {
-        current: totalProtein,
-        goal: 120
+        current: prevData.protein.current,
+        goal: nutritionGoals.protein
       },
       carbs: {
-        current: totalCarbs,
-        goal: 220
+        current: prevData.carbs.current,
+        goal: nutritionGoals.carbs
       },
       fats: {
-        current: totalFat,
-        goal: 73
+        current: prevData.fats.current,
+        goal: nutritionGoals.fats
       }
+    }));
+    
+  } catch (error) {
+    console.error('加载用户数据和营养目标失败:', error);
+  }
+};
+
+  // 修改原来的useEffect，调用新的函数
+  useEffect(() => {
+    loadUserDataAndNutritionGoals();
+  }, []);
+
+
+// 在组件中添加以下代码，放在其他useEffect下面：
+useFocusEffect(
+  useCallback(() => {
+    // 当页面获取焦点(屏幕变为活跃)时，刷新营养目标
+    console.log('饮食页面获取焦点，自动刷新营养目标');
+    loadUserDataAndNutritionGoals();
+    
+    // 可选：如果选中的是当天，也刷新当天的食物数据
+    const today = new Date();
+    if (selectedDate.toDateString() === today.toDateString()) {
+      loadDataForDate(selectedDate);
+    }
+    
+    return () => {
+      // 清理函数，当组件失去焦点时调用
+      console.log('饮食页面失去焦点');
+    };
+  }, [])  // 空依赖数组表示只在焦点变化时执行
+);
+
+// 计算总营养数据的函数现在应该只更新current值，不改变goal
+const calculateNutritionTotals = (mealsData: Meal[]) => {
+  let totalCalories = 0;
+  let totalProtein = 0;
+  let totalCarbs = 0;
+  let totalFat = 0;
+  
+  mealsData.forEach(meal => {
+    meal.foods.forEach(food => {
+      totalCalories += food.calories;
+      totalProtein += food.protein || 0;
+      totalCarbs += food.carbs || 0;
+      totalFat += food.fat || 0;
     });
-  };
+  });
+  
+  // 只更新current值，保留之前计算的goal值
+  setNutritionData(prevData => ({
+    calories: {
+      current: totalCalories,
+      goal: prevData.calories.goal
+    },
+    protein: {
+      current: totalProtein,
+      goal: prevData.protein.goal
+    },
+    carbs: {
+      current: totalCarbs,
+      goal: prevData.carbs.goal
+    },
+    fats: {
+      current: totalFat,
+      goal: prevData.fats.goal
+    }
+  }));
+};
+
 
   // 修改 loadDataForDate 函数使用新的 fetchMeals 函数
     const loadDataForDate = async (date: Date) => {
@@ -662,7 +756,7 @@ const handleDeleteFood = async (mealId: number, foodIndex: number) => {
   return (
     <View style={styles.container}>
       {/* 摄像头显示控制 */}
-{isCameraVisible && (
+  {isCameraVisible && (
   <View style={styles.cameraContainer}>
     <CameraView style={styles.camera} facing={facing} ref={cameraRef}>
       {/* 切换镜头 */}
@@ -1584,5 +1678,24 @@ const styles = StyleSheet.create({
   deleteMealButton: {
     padding: 8,
     marginRight: 8,
+  },
+  cardTitleContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  refreshButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(42, 134, 255, 0.1)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  refreshButtonText: {
+    fontSize: 12,
+    color: '#2A86FF',
+    marginLeft: 4,
   },
 });

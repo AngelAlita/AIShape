@@ -2,7 +2,7 @@ import { ScrollView, StyleSheet, View, Text, TouchableOpacity } from 'react-nati
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import { Alert } from 'react-native';
 import React, { ReactNode, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -42,36 +42,12 @@ export default function HomeScreen() {
   
   // 饮食记录按钮处理函数
   const handleDietRecord = () => {
-    Alert.alert(
-      "记录膳食",
-      "请选择要记录的餐点",
-      [
-        {
-          text: "早餐",
-          onPress: () => navigateToDiet(1)
-        },
-        {
-          text: "午餐",
-          onPress: () => navigateToDiet(2)
-        },
-        {
-          text: "晚餐",
-          onPress: () => navigateToDiet(3)
-        },
-        {
-          text: "取消",
-          style: "cancel"
-        }
-      ]
-    );
+    router.push('/diet');
   };
 
-  // 导航到饮食页面并设置要记录的餐点
-  const navigateToDiet = (mealId: number) => {
-    router.push({
-      pathname: "/diet",
-      params: { mealId: mealId.toString(), openCamera: "true" }
-    });
+
+  const navigateToBodyData = () => {
+    router.push('/stats');
   };
 
   return (
@@ -127,7 +103,8 @@ export default function HomeScreen() {
         
         {/* 功能快捷按钮 */}
         <View style={styles.quickAccessContainer}>
-          <TouchableOpacity style={styles.quickAccessButton}>
+          <TouchableOpacity style={styles.quickAccessButton}
+            onPress={() => router.push('/training')}>
             <View style={[styles.quickAccessIconContainer, { backgroundColor: '#2A86FF' }]}>
               <FontAwesome5 name="dumbbell" size={20} color="white" />
             </View>
@@ -145,14 +122,16 @@ export default function HomeScreen() {
             <Text style={styles.quickAccessText}>饮食记录</Text>
           </TouchableOpacity>
           
-          <TouchableOpacity style={styles.quickAccessButton}>
+          <TouchableOpacity style={styles.quickAccessButton}
+            onPress={navigateToBodyData}>
             <View style={[styles.quickAccessIconContainer, { backgroundColor: '#FF6B6B' }]}>
               <Ionicons name="body" size={22} color="white" />
             </View>
             <Text style={styles.quickAccessText}>身体数据</Text>
           </TouchableOpacity>
           
-          <TouchableOpacity style={styles.quickAccessButton}>
+          <TouchableOpacity style={styles.quickAccessButton}
+            onPress={() => Alert.alert('AI 教练', '功能正在开发中...')} >
             <View style={[styles.quickAccessIconContainer, { backgroundColor: '#4CD97B' }]}>
               <MaterialCommunityIcons name="robot" size={22} color="white" />
             </View>

@@ -21,6 +21,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { RefreshControl } from 'react-native';
 
+
 // 用户数据接口
 interface UserData {
   name: string;
@@ -65,6 +66,96 @@ export default function ProfileScreen() {
   });
   const [updating, setUpdating] = useState(false);
   
+  const showFeatureInDevelopment = (featureName: string) => {
+    if (Platform.OS === 'web') {
+      window.alert(`${featureName}功能正在开发中，敬请期待！`);
+    } else {
+      Alert.alert(
+        "功能开发中",
+        `${featureName}功能正在开发中，敬请期待！`,
+        [{ text: "确定", style: "default" }]
+      );
+    }
+  };
+  
+  // 显示深色模式切换功能
+  const toggleDarkMode = () => {
+    // 这里简单实现一个提示，您可以根据需要完善为真正的深色模式切换功能
+    showFeatureInDevelopment("深色模式");
+  };
+  
+  // 显示项目简介
+  const showAboutInfo = () => {
+    if (Platform.OS === 'web') {
+      window.alert("AIShape - 智能健身饮食助手\n\n" +
+        "AIShape是一款结合AI技术的健身饮食应用，致力于为用户提供个性化的健身和饮食方案。\n\n" +
+        "核心功能包括：\n" +
+        "· AI图像识别：自动识别和记录食物\n" +
+        "· 个性化训练计划：根据用户目标定制训练方案\n" +
+        "· 营养分析：追踪营养摄入和消耗\n" +
+        "· 数据可视化：直观展示健康数据和进度\n\n" +
+        "版本：1.0.0\n" +
+        "开发团队：AIShape团队\n" +
+        "联系我们：support@aishape.com\n");
+    } else {
+      Alert.alert(
+        "关于 AIShape",
+        "AIShape - 智能健身饮食助手\n\n" +
+        "AIShape是一款结合AI技术的健身饮食应用，致力于为用户提供个性化的健身和饮食方案。\n\n" +
+        "核心功能包括：\n" +
+        "· AI图像识别：自动识别和记录食物\n" +
+        "· 个性化训练计划：根据用户目标定制训练方案\n" +
+        "· 营养分析：追踪营养摄入和消耗\n" +
+        "· 数据可视化：直观展示健康数据和进度",
+        [
+          { 
+            text: "联系我们", 
+            onPress: () => {
+              // 添加一个有趣的小玩笑
+              setTimeout(() => {
+                Alert.alert(
+                  "找到我们啦！",
+                  "恭喜你发现了彩蛋！\n\n" +
+                  "我们的AI教练正在健身房做深蹲，暂时无法接听...\n" +
+                  "它说它还需要完成3组训练才能回复你的消息。\n\n" +
+                  "要不...你也先去做个10个俯卧撑，我们很快联系你？😉",
+                  [
+                    {
+                      text: "好吧，我去做俯卧撑",
+                      onPress: () => {
+                        setTimeout(() => {
+                          Alert.alert(
+                            "锻炼完成！",
+                            "哇！你真的去做了吗？太棒了！\n" +
+                            "你现在可以发邮件到support@aishape.com联系我们了\n" +
+                            "(P.S. 你刚才燃烧了大约5卡路里，再接再厉！)"
+                          );
+                        }, 500);
+                      }
+                    },
+                    {
+                      text: "算了，我还是发邮件吧",
+                      style: "cancel",
+                      onPress: () => {
+                        Alert.alert(
+                          "邮件联系",
+                          "请发送邮件至：support@aishape.com\n" +
+                          "我们的团队将尽快回复您！",
+                          [{ text: "确定" }]
+                        );
+                      }
+                    }
+                  ]
+                );
+              }, 300);
+            }
+          },
+          { text: "确定" }
+        ]
+      );
+    }
+  };
+
   // 添加类型定义
   interface MenuItemProps {
     icon: ReactNode;
@@ -619,19 +710,22 @@ const renderEditModal = () => (
             />
             <MenuItem 
               icon={<Ionicons name="fitness" size={18} color="#FF6B6B" />}
-              title="训练记录"
+              title="训练优化"
               color="#FF6B6B"
+              onPress={() => showFeatureInDevelopment("训练优化")}
             />
             <MenuItem 
               icon={<Ionicons name="restaurant-outline" size={18} color="#FFD166" />}
-              title="饮食记录"
+              title="饮食建议"
               color="#FFD166"
+              onPress={() => showFeatureInDevelopment("饮食建议")}
             />
             <MenuItem 
               icon={<Ionicons name="trophy-outline" size={18} color="#4CD97B" />}
               title="我的成就"
               rightText={`${userData.achievements}项成就`}
               color="#4CD97B"
+              onPress={() => showFeatureInDevelopment("我的成就")}
             />
           </View>
         </View>
@@ -643,21 +737,25 @@ const renderEditModal = () => (
             <MenuItem 
               icon={<Ionicons name="notifications-outline" size={18} color="#2A86FF" />}
               title="通知设置"
+              onPress={() => showFeatureInDevelopment("通知设置")}
             />
             <MenuItem 
               icon={<MaterialIcons name="privacy-tip" size={18} color="#FF6B6B" />}
               title="隐私设置"
               color="#FF6B6B"
+              onPress={() => showFeatureInDevelopment("隐私设置")}
             />
             <MenuItem 
               icon={<Ionicons name="moon-outline" size={18} color="#FFD166" />}
               title="深色模式"
               color="#FFD166"
+              onPress={toggleDarkMode}
             />
             <MenuItem 
               icon={<Ionicons name="help-circle-outline" size={18} color="#4CD97B" />}
               title="帮助与反馈"
               color="#4CD97B"
+              onPress={showAboutInfo}
             />
           </View>
         </View>

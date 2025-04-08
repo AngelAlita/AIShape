@@ -165,6 +165,7 @@ const AddWorkoutModal = ({ visible, onClose, onAddWorkout, existingWorkouts }: A
             <TextInput
               style={styles.input}
               placeholder="例如：上肢力量训练"
+              placeholderTextColor="rgba(153, 153, 153, 0.6)" // 更淡的灰色
               value={newWorkout.name}
               onChangeText={(text) => handleInputChange('name', text)}
             />
@@ -174,6 +175,7 @@ const AddWorkoutModal = ({ visible, onClose, onAddWorkout, existingWorkouts }: A
               style={styles.input}
               placeholder="例如：09:30 - 10:30"
               value={newWorkout.time}
+              placeholderTextColor="rgba(153, 153, 153, 0.6)" // 更淡的灰色
               onChangeText={(text) => handleInputChange('time', text)}
             />
             
@@ -184,6 +186,7 @@ const AddWorkoutModal = ({ visible, onClose, onAddWorkout, existingWorkouts }: A
                   style={styles.input}
                   placeholder="例如：60"
                   keyboardType="numeric"
+                  placeholderTextColor="rgba(153, 153, 153, 0.6)" // 更淡的灰色
                   value={newWorkout.duration}
                   onChangeText={(text) => handleInputChange('duration', text)}
                 />
@@ -195,6 +198,7 @@ const AddWorkoutModal = ({ visible, onClose, onAddWorkout, existingWorkouts }: A
                   style={styles.input}
                   placeholder="例如：320"
                   keyboardType="numeric"
+                  placeholderTextColor="rgba(153, 153, 153, 0.6)" // 更淡的灰色
                   value={newWorkout.calories}
                   onChangeText={(text) => handleInputChange('calories', text)}
                 />
@@ -217,6 +221,7 @@ const AddWorkoutModal = ({ visible, onClose, onAddWorkout, existingWorkouts }: A
                   style={styles.input}
                   placeholder="例如：哑铃推举"
                   value={exercise.name}
+                  placeholderTextColor="rgba(153, 153, 153, 0.6)" // 更淡的灰色
                   onChangeText={(text) => handleExerciseChange(index, 'name', text)}
                 />
                 
@@ -227,6 +232,7 @@ const AddWorkoutModal = ({ visible, onClose, onAddWorkout, existingWorkouts }: A
                       style={styles.input}
                       placeholder="3"
                       keyboardType="numeric"
+                      placeholderTextColor="rgba(153, 153, 153, 0.6)" // 更淡的灰色
                       value={exercise.sets.toString()}
                       onChangeText={(text) => handleExerciseChange(index, 'sets', text)}
                     />
@@ -238,6 +244,7 @@ const AddWorkoutModal = ({ visible, onClose, onAddWorkout, existingWorkouts }: A
                       style={styles.input}
                       placeholder="12"
                       value={exercise.reps}
+                      placeholderTextColor="rgba(153, 153, 153, 0.6)" // 更淡的灰色
                       onChangeText={(text) => handleExerciseChange(index, 'reps', text)}
                     />
                   </View>
@@ -248,6 +255,7 @@ const AddWorkoutModal = ({ visible, onClose, onAddWorkout, existingWorkouts }: A
                       style={styles.input}
                       placeholder="15kg"
                       value={exercise.weight}
+                      placeholderTextColor="rgba(153, 153, 153, 0.6)" // 更淡的灰色
                       onChangeText={(text) => handleExerciseChange(index, 'weight', text)}
                     />
                   </View>
