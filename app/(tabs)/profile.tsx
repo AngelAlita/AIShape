@@ -1,4 +1,5 @@
-import React, { ReactNode, useState, useEffect } from 'react';
+import React, { ReactNode, useState, useEffect, useRef } from 'react';
+import Markdown from 'react-native-markdown-display';
 import { 
   View, 
   Text, 
@@ -20,7 +21,7 @@ import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { RefreshControl } from 'react-native';
-
+import { fetchMeals } from '../api/meals';
 
 // 用户数据接口
 interface UserData {
@@ -43,6 +44,12 @@ export default function ProfileScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   
+  const [dietAdvice, setDietAdvice] = useState('');
+  const [showDietAdviceModal, setShowDietAdviceModal] = useState(false);
+  const [loadingDietAdvice, setLoadingDietAdvice] = useState(false);
+  const [streamComplete, setStreamComplete] = useState(false); // 添加流式完成状态
+
+
   // 用户数据状态
   const [userData, setUserData] = useState<UserData>({
     name: "用户",
@@ -613,9 +620,204 @@ const renderEditModal = () => (
       </View>
     );
   }
+
+  // 修改获取饮食建议的函数，实现流式响应
+const getDietAdvice = async () => {
+  try {
+    setLoadingDietAdvice(true);
+    setDietAdvice(''); // 清空之前的建议内容
+    setStreamComplete(false);
+    
+    // 获取最近一周的日期范围
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(endDate.getDate() - 7);
+    
+    // 获取一周的饮食数据
+    const mealsData = await fetchMeals(startDate, endDate);
+    
+    // 格式化数据为JSON字符串
+    const dietData = {
+      meals: mealsData.map(meal => ({
+        id: meal.id,
+        type: meal.type,
+        date: meal.date,
+        time: meal.time || '',
+        calories: meal.total_calories || 0,
+        completed: meal.completed || false,
+        foods: (meal.foods || []).map(food => ({
+          name: food.name,
+          amount: food.amount || '',
+          calories: food.calories || 0,
+          protein: food.protein || 0,
+          carbs: food.carbs || 0,
+          fat: food.fat || 0
+        }))
+      })),
+      userInfo: {
+        height: parseFloat(userData.height) || 170,
+        weight: parseFloat(userData.weight) || 70,
+        bmi: parseFloat(userData.bmi) || 23,
+        gender: userData.gender || 'male'
+      }
+    };
+    
+    // 调用LLM API获取建议，启用流式响应
+    const apiPayload = {
+      "model": "deepseek-ai/DeepSeek-V3",
+      "messages": [
+        {
+          "role": "system",
+          "content": "你是一位专业的营养师，根据用户的饮食记录和身体数据，提供专业、个性化的饮食建议。回答要采用Markdown格式，分析要详细具体，注重科学性，并提供可执行的改进方案。可以使用## 作为二级标题，*斜体*，**加粗**，- 列表等Markdown元素。"
+        },
+        {
+          "role": "user",
+          "content": `请分析我最近一周的饮食数据和个人信息，给出专业的饮食建议。我的个人信息：身高${dietData.userInfo.height}cm，体重${dietData.userInfo.weight}kg，BMI${dietData.userInfo.bmi}，性别${dietData.userInfo.gender === 'male' ? '男' : '女'}。以下是我最近一周的饮食记录：${JSON.stringify(dietData.meals, null, 2)}`
+        }
+      ],
+      "stream": true, // 启用流式响应
+      "max_tokens": 8000,
+      "temperature": 0.2,
+      "top_p": 0.7,
+      "top_k": 5,
+      "frequency_penalty": 0.3,
+      "response_format": {"type": "text"}
+    };
+    
+    // API认证信息
+    const apiHeaders = {
+      "Authorization": "Bearer sk-elqtgpzeimrwhwtfiuhogeohsmxmgmwamrlsyvtrrknhyiia",
+      "Content-Type": "application/json"
+    };
+
+    // 显示饮食建议模态框，先展示加载状态
+    setShowDietAdviceModal(true);
+    
+    // 发起流式请求
+    const response = await fetch("https://api.siliconflow.cn/v1/chat/completions", {
+      method: "POST",
+      headers: apiHeaders,
+      body: JSON.stringify(apiPayload)
+    });
+    
+    if (!response.ok) {
+      throw new Error(`API响应错误: ${response.status}`);
+    }
+    
+    // 处理流式响应
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder("utf-8");
+    let accumulatedContent = '';
+    
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        setStreamComplete(true);
+        break;
+      }
+      
+      // 解码二进制数据
+      const chunk = decoder.decode(value, { stream: true });
+      
+      try {
+        // 处理SSE格式的数据
+        const lines = chunk.split('\n');
+        for (const line of lines) {
+          if (line.startsWith('data: ') && line !== 'data: [DONE]') {
+            const jsonData = JSON.parse(line.substring(6));
+            
+            // 提取内容片段
+            const contentDelta = jsonData.choices && 
+                               jsonData.choices[0] && 
+                               jsonData.choices[0].delta && 
+                               jsonData.choices[0].delta.content;
+            
+            if (contentDelta) {
+              accumulatedContent += contentDelta;
+              setDietAdvice(accumulatedContent);
+            }
+          }
+        }
+      } catch (e) {
+        console.error('解析流式响应出错:', e);
+      }
+    }
+    
+  } catch (error) {
+    console.error('获取饮食建议失败:', error);
+    
+    // 如果API暂不可用，显示默认建议
+    setDietAdvice(`## 个性化饮食建议
+
+基于您的饮食记录，我们有以下建议：
+
+### 营养均衡
+- **增加蔬菜水果摄入**，每天至少5份不同颜色的蔬果
+- 控制**精制碳水化合物**的消费量，选择全谷类食物
+- 选择更多**富含优质蛋白质**的食物如鱼类和豆制品
+
+### 饮水建议
+保持充足的水分摄入，每天至少1.5-2升水
+
+### 饮食习惯
+- 规律三餐，避免暴饮暴食
+- 细嚼慢咽，帮助消化和控制食量`);
+    setStreamComplete(true);
+    
+  } finally {
+    setLoadingDietAdvice(false);
+  }
+};
+
+// 修改饮食建议模态框以支持Markdown渲染
+const renderDietAdviceModal = () => (
+  <Modal
+    animationType="slide"
+    transparent={true}
+    visible={showDietAdviceModal}
+    onRequestClose={() => setShowDietAdviceModal(false)}
+  >
+    <View style={styles.modalOverlay}>
+      <View style={styles.modalContent}>
+        <Text style={styles.modalTitle}>个性化饮食建议</Text>
+        
+        <ScrollView style={styles.adviceScrollView}>
+          {loadingDietAdvice && !dietAdvice && (
+            <View style={{alignItems: 'center', padding: 20}}>
+              <ActivityIndicator size="large" color="#2A86FF" />
+              <Text style={{marginTop: 10, color: '#666'}}>正在分析您的饮食数据...</Text>
+            </View>
+          )}
+          
+          {dietAdvice ? (
+            <Markdown style={markdownStyles}>
+              {dietAdvice}
+            </Markdown>
+          ) : null}
+          
+          {!loadingDietAdvice && !dietAdvice && (
+            <Text style={styles.adviceText}>
+              无法获取饮食建议，请稍后再试。
+            </Text>
+          )}
+        </ScrollView>
+        
+        <TouchableOpacity 
+          style={[styles.modalButton, styles.saveButton]} 
+          onPress={() => setShowDietAdviceModal(false)}
+          disabled={loadingDietAdvice && !streamComplete}
+        >
+          <Text style={styles.saveButtonText}>{streamComplete ? "明白了" : "正在生成..."}</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  </Modal>
+);
+
   return (
     <View style={styles.container}>
       {renderEditModal()}
+      {renderDietAdviceModal()}
       <ScrollView 
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
@@ -716,9 +918,9 @@ const renderEditModal = () => (
             />
             <MenuItem 
               icon={<Ionicons name="restaurant-outline" size={18} color="#FFD166" />}
-              title="饮食建议"
+              title={loadingDietAdvice ? "正在分析..." : "饮食建议"}
               color="#FFD166"
-              onPress={() => showFeatureInDevelopment("饮食建议")}
+              onPress={loadingDietAdvice ? undefined : getDietAdvice}
             />
             <MenuItem 
               icon={<Ionicons name="trophy-outline" size={18} color="#4CD97B" />}
@@ -778,6 +980,51 @@ const renderEditModal = () => (
     </View>
   );
 }
+
+const markdownStyles = StyleSheet.create({
+  body: {
+    color: '#333',
+    fontSize: 16,
+  },
+  heading1: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#2A86FF',
+    marginVertical: 10,
+  },
+  heading2: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+    marginVertical: 8,
+    marginTop: 16,
+  },
+  heading3: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#555',
+    marginVertical: 6,
+  },
+  paragraph: {
+    marginVertical: 8,
+    lineHeight: 24,
+  },
+  list_item: {
+    marginVertical: 4,
+    lineHeight: 24,
+    paddingLeft: 5,
+  },
+  strong: {
+    fontWeight: 'bold',
+    color: '#222',
+  },
+  em: {
+    fontStyle: 'italic',
+  },
+  bullet_list: {
+    marginVertical: 8,
+  }
+});
 
 const styles = StyleSheet.create({
   container: {
@@ -1116,5 +1363,15 @@ const styles = StyleSheet.create({
   },
   genderTextSelected: {
     color: 'white'
+  },
+  adviceScrollView: {
+    maxHeight: 350,
+    marginBottom: 20,
+  },
+  adviceText: {
+    fontSize: 16,
+    lineHeight: 24,
+    color: '#333',
+    padding: 5,
   },
 });
