@@ -66,7 +66,6 @@ export default function DietScreen() {
   const searchParams = useLocalSearchParams();
   const mealIdParam = searchParams.mealId as string;
   const openCameraParam = searchParams.openCamera as string;
-
   const insets = useSafeAreaInsets();
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [facing, setFacing] = useState<CameraType>('back');
@@ -121,7 +120,7 @@ export default function DietScreen() {
         const mealsData = await fetchMealsByDate(date);
   
         // 添加数据字段映射，确保服务器返回的 total_calories 字段被正确映射到 calories 字段
-        const formattedMeals = mealsData?.map(meal => ({
+        const formattedMeals = mealsData?.map((meal: { id: any; type: any; time: any; total_calories: any; completed: any; foods: any; }) => ({
           id: meal.id,
           type: meal.type,
           time: meal.time || '',
