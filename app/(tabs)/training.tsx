@@ -258,8 +258,8 @@ export default function TrainingScreen() {
       // 转换为前端格式并计算统计数据
       const workouts = response.map(convertToFrontendWorkout);
       const totalWorkouts = workouts.length;
-      const totalCalories = workouts.reduce((sum, w) => sum + w.calories, 0);
-      const totalDuration = workouts.reduce((sum, w) => sum + w.duration, 0);
+      const totalCalories = workouts.reduce((sum: any, w: { calories: any; }) => sum + w.calories, 0);
+      const totalDuration = workouts.reduce((sum: any, w: { duration: any; }) => sum + w.duration, 0);
       
       // 计算连续训练天数
       // 这部分可能需要专门的API，这里只是简单示例
@@ -267,7 +267,7 @@ export default function TrainingScreen() {
       
       // 获取本月训练数据量
       const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-      const monthlyWorkouts = workouts.filter(w => {
+      const monthlyWorkouts = workouts.filter((w: { date: any; }) => {
         const workoutDate = new Date(w.date || '');
         return workoutDate >= firstDayOfMonth;
       }).length;
