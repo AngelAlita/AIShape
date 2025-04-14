@@ -22,6 +22,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { RefreshControl } from 'react-native';
 import { fetchMeals } from '../api/meals';
+import { fetchTrainingHistory } from '../api/workouts';
 
 // 用户数据接口
 interface UserData {
@@ -49,6 +50,11 @@ export default function ProfileScreen() {
   const [loadingDietAdvice, setLoadingDietAdvice] = useState(false);
   const [streamComplete, setStreamComplete] = useState(false); // 添加流式完成状态
 
+
+  const [trainingAdvice, setTrainingAdvice] = useState('');
+  const [showTrainingAdviceModal, setShowTrainingAdviceModal] = useState(false);
+  const [loadingTrainingAdvice, setLoadingTrainingAdvice] = useState(false);
+  const [trainingStreamComplete, setTrainingStreamComplete] = useState(false);
 
   // 用户数据状态
   const [userData, setUserData] = useState<UserData>({
@@ -621,6 +627,159 @@ const renderEditModal = () => (
     );
   }
 
+  // ...existing code...
+// 添加获取训练优化建议的函数
+const getTrainingAdvice = async () => {
+  try {
+    setLoadingTrainingAdvice(true);
+    setTrainingAdvice(''); // 清空之前的建议内容
+    setTrainingStreamComplete(false);
+    
+    setShowTrainingAdviceModal(true);
+
+    // 获取最近一周的日期范围
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(endDate.getDate() - 7); // 获取1周的数据
+    
+    // 格式化日期为YYYY-MM-DD
+    const startDateStr = startDate.toISOString().split('T')[0];
+    const endDateStr = endDate.toISOString().split('T')[0];
+    
+    // 从 API 获取训练历史
+
+    const trainingData = await fetchTrainingHistory({
+      start_date: startDateStr,
+      end_date: endDateStr
+    });
+    
+   
+    // 构建用户训练数据对象
+    const trainingUserData = {
+      profile: {
+        height: parseFloat(userData.height) || 170,
+        weight: parseFloat(userData.weight) || 70,
+        bmi: parseFloat(userData.bmi) || 23,
+        gender: userData.gender || 'male',
+        level: userData.level || "健身新手",
+        completedWorkouts: userData.completedWorkouts || 0
+      },
+      trainingHistory: trainingData
+    };
+    
+    // 显示训练建议模态框，先展示加载状态
+    setShowTrainingAdviceModal(true);
+    
+    // 调用LLM API获取建议，启用流式响应
+    const apiPayload = {
+      "model": "deepseek-ai/DeepSeek-V3",
+      "messages": [
+        {
+          "role": "system",
+          "content": "你是一位专业的健身教练，根据用户的训练记录和身体数据，提供专业、个性化的训练优化建议。回答要采用Markdown格式，分析要详细具体，注重科学性，并提供可执行的改进方案。可以使用## 作为二级标题，*斜体*，**加粗**，- 列表等Markdown元素。"
+        },
+        {
+          "role": "user",
+          "content": `请分析我的训练数据和个人信息，给出专业的训练优化建议。我的个人信息：身高${trainingUserData.profile.height}cm，体重${trainingUserData.profile.weight}kg，BMI${trainingUserData.profile.bmi}，性别${trainingUserData.profile.gender === 'male' ? '男' : '女'}，健身水平${trainingUserData.profile.level}。以下是我近期的训练记录：${JSON.stringify(trainingData, null, 2)}`
+        }
+      ],
+      "stream": true, // 启用流式响应
+      "max_tokens": 8000,
+      "temperature": 0.2,
+      "top_p": 0.7,
+      "top_k": 5,
+      "frequency_penalty": 0.3,
+      "response_format": {"type": "text"}
+    };
+    
+    // API认证信息
+    const apiHeaders = {
+      "Authorization": "Bearer sk-elqtgpzeimrwhwtfiuhogeohsmxmgmwamrlsyvtrrknhyiia",
+      "Content-Type": "application/json"
+    };
+    
+    // 发起流式请求
+    const response = await fetch("https://api.siliconflow.cn/v1/chat/completions", {
+      method: "POST",
+      headers: apiHeaders,
+      body: JSON.stringify(apiPayload)
+    });
+    
+    if (!response.ok) {
+      throw new Error(`API响应错误: ${response.status}`);
+    }
+    
+    // 处理流式响应
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder("utf-8");
+    let accumulatedContent = '';
+    
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        setTrainingStreamComplete(true);
+        break;
+      }
+      
+      // 解码二进制数据
+      const chunk = decoder.decode(value, { stream: true });
+      
+      try {
+        // 处理SSE格式的数据
+        const lines = chunk.split('\n');
+        for (const line of lines) {
+          if (line.startsWith('data: ') && line !== 'data: [DONE]') {
+            const jsonData = JSON.parse(line.substring(6));
+            
+            // 提取内容片段
+            const contentDelta = jsonData.choices && 
+                               jsonData.choices[0] && 
+                               jsonData.choices[0].delta && 
+                               jsonData.choices[0].delta.content;
+            
+            if (contentDelta) {
+              accumulatedContent += contentDelta;
+              setTrainingAdvice(accumulatedContent);
+            }
+          }
+        }
+      } catch (e) {
+        console.error('解析流式响应出错:', e);
+      }
+    }
+    
+  } catch (error) {
+    console.error('获取训练建议失败:', error);
+    
+    // 如果API暂不可用，显示默认建议
+    setTrainingAdvice(`## 个性化训练优化建议
+
+基于您的训练记录，我们为您提供以下建议：
+
+### 训练频率与强度
+- **保持每周3-4次训练频率**，确保有足够的恢复时间
+- 循序渐进增加训练强度，每2-3周提高重量或组数
+
+### 训练计划优化
+- 采用**全身分化训练模式**，每个肌群每周刺激2次
+- 针对薄弱部位增加专项训练，提高整体平衡性
+- 结合力量训练和有氧训练，提高心肺功能
+
+### 动作技术
+- 注重基础复合动作的标准姿势，确保高效安全
+- 使用适当的重量，保持良好的动作控制和肌肉感受度
+
+### 恢复与营养
+- 训练间隔48小时让同一肌群充分恢复
+- 保证充足的蛋白质摄入，支持肌肉修复与生长`);
+    setTrainingStreamComplete(true);
+    
+  } finally {
+    setLoadingTrainingAdvice(false);
+  }
+};
+// ...existing code...
+
   // 修改获取饮食建议的函数，实现流式响应
 const getDietAdvice = async () => {
   try {
@@ -814,10 +973,56 @@ const renderDietAdviceModal = () => (
   </Modal>
 );
 
+// 添加训练建议模态框
+const renderTrainingAdviceModal = () => (
+  <Modal
+    animationType="slide"
+    transparent={true}
+    visible={showTrainingAdviceModal}
+    onRequestClose={() => setShowTrainingAdviceModal(false)}
+  >
+    <View style={styles.modalOverlay}>
+      <View style={styles.modalContent}>
+        <Text style={styles.modalTitle}>训练优化建议</Text>
+        
+        <ScrollView style={styles.adviceScrollView}>
+          {loadingTrainingAdvice && !trainingAdvice && (
+            <View style={{alignItems: 'center', padding: 20}}>
+              <ActivityIndicator size="large" color="#FF6B6B" />
+              <Text style={{marginTop: 10, color: '#666'}}>正在分析您的训练数据...</Text>
+            </View>
+          )}
+          
+          {trainingAdvice ? (
+            <Markdown style={markdownStyles}>
+              {trainingAdvice}
+            </Markdown>
+          ) : null}
+          
+          {!loadingTrainingAdvice && !trainingAdvice && (
+            <Text style={styles.adviceText}>
+              无法获取训练建议，请稍后再试。
+            </Text>
+          )}
+        </ScrollView>
+        
+        <TouchableOpacity 
+          style={[styles.modalButton, styles.saveButton, {backgroundColor: '#FF6B6B'}]} 
+          onPress={() => setShowTrainingAdviceModal(false)}
+          disabled={loadingTrainingAdvice && !trainingStreamComplete}
+        >
+          <Text style={styles.saveButtonText}>{trainingStreamComplete ? "明白了" : "正在生成..."}</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  </Modal>
+);
+
   return (
     <View style={styles.container}>
       {renderEditModal()}
       {renderDietAdviceModal()}
+      {renderTrainingAdviceModal()} {/* 新增训练建议模态框 */}
       <ScrollView 
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
@@ -912,9 +1117,9 @@ const renderDietAdviceModal = () => (
             />
             <MenuItem 
               icon={<Ionicons name="fitness" size={18} color="#FF6B6B" />}
-              title="训练优化"
+              title={loadingTrainingAdvice ? "正在分析..." : "训练优化"}
               color="#FF6B6B"
-              onPress={() => showFeatureInDevelopment("训练优化")}
+              onPress={loadingTrainingAdvice ? undefined : getTrainingAdvice}
             />
             <MenuItem 
               icon={<Ionicons name="restaurant-outline" size={18} color="#FFD166" />}
